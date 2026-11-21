@@ -6,6 +6,10 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* ignorieren */ } },
 };
 
+// PC-Version (eine einzelne HTML-Datei, kein Server): speichert über den
+// Lesezeichen-Helfer direkt auf cookidoo.de.
+const STANDALONE = Boolean(window.PETRAS_STANDALONE);
+const MARK = 'PETRAS-REZEPT:';
 let settings = store.get('rb.settings', { pin: '', server: '' });
 let steps = [];
 
@@ -179,7 +183,34 @@ $('btnNew').addEventListener('click', () => {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
 
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { /* Fallback */ }
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  let ok = false; try { ok = document.execCommand('copy'); } catch { /* egal */ }
+  ta.remove(); return ok;
+}
+
+async function prepareForCookidoo() {
+  const r = currentRecipe();
+  const out = $('result');
+  const ok = await copyText(MARK + JSON.stringify(r));
+  window.open('https://cookidoo.de/created-recipes/de-DE', '_blank', 'noopener');
+  out.innerHTML = ok
+    ? `✅ <b>Rezept kopiert – Cookidoo wird geöffnet.</b>
+       <ol><li>Auf cookidoo.de angemeldet sein.</li>
+       <li>In der Lesezeichenleiste auf <b>„➜ Petras Rezepte speichern“</b> klicken.</li>
+       <li>Ins Feld klicken, <b>Strg + V</b> drücken, dann <b>„In Cookidoo speichern“</b>.</li></ol>`
+    : '❌ Kopieren hat nicht geklappt. Bitte „Als Text kopieren“ versuchen.';
+  out.className = `result ${ok ? 'ok' : 'err'}`;
+  const h = store.get('rb.history', []);
+  h.unshift({ title: r.title, url: 'https://cookidoo.de/created-recipes/de-DE', at: Date.now() });
+  store.set('rb.history', h.slice(0, 50)); renderHistory();
+}
+
 $('btnUpload').addEventListener('click', async () => {
+  if (STANDALONE) return prepareForCookidoo();
   const r = currentRecipe();
   const btn = $('btnUpload'), out = $('result');
   btn.disabled = true; btn.textContent = '⏳ Wird gespeichert …';
@@ -242,5 +273,11 @@ if (sharedText) {
   if (draft.recipe && (draft.recipe.title || draft.recipe.steps?.length)) fillForm(draft.recipe);
 }
 renderHistory();
-refreshStatus();
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+if (STANDALONE) {
+  $('statusChip').classList.add('hide');
+  $('btnSettings').classList.add('hide');
+  $('btnUpload').textContent = '☁️ Für Cookidoo kopieren & öffnen';
+} else {
+  refreshStatus();
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+}
