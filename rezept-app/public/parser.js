@@ -124,11 +124,27 @@ function cleanLine(l) {
     .trim();
 }
 
+// Kopf-/Fußzeilen aus gedruckten PDFs (Browser-Druck) und Seitenreste
+const NOISE = [
+  /^https?:\/\/\S+(\s+\d+\s*\/\s*\d+)?$/i,
+  /^www\.\S+$/i,
+  /^\d{1,2}\.\d{1,2}\.\d{2,4},?\s+\d{1,2}[:\s]\d{2}\b/,
+  /^\d{1,2}\/\d{1,2}\/\d{2,4},?\s+\d{1,2}:\d{2}\b/,
+  /^\d+\s*\/\s*\d+$/,
+  /^Seite\s+\d+(\s*(von|\/)\s*\d+)?$/i,
+  /^©/,
+  /^(drucken|teilen|merken|bewerten|speichern|pdf|zur einkaufsliste|auf die einkaufsliste|rezept drucken|jetzt bewerten)$/i,
+];
+export const isNoise = (l) => NOISE.some((re) => re.test(l));
+// Zeilen im Kopfbereich, die kein Titel sind
+const NOT_TITLE = /[›»]|\s>\s.*\s>\s|⭐|★|Bewertung|^\d+([,.]\d)?\s*(von 5|\/\s*5)|^(Startseite|Home|Rezepte)\b/i;
+
 function parseMeta(line, meta, section = 'head') {
   let m;
   // In der Zutatenliste nur eindeutige Zeilen wie "4 Portionen" (nicht "4 Stück Eier")
   if (section === 'ingr' && !/^(?:\d+\s*(?:Portion(?:en)?|Personen)\s*$|(?:Portionen|Personen|Arbeitszeit|Vorbereitungszeit|Zubereitungszeit|Gesamtzeit)\b)/i.test(line)) return false;
   if ((m = line.match(/(\d+)\s*(?:Portion(?:en)?|Personen|Pers\.|Stück|Stk\.?)\b/i)) ||
+      (section === 'head' && (m = line.match(/^(\d+)\s*(?:Brote?|Laib(?:e)?|Kuchen|Torten?|Bleche?|Gläser|Glas|Muffins|Brötchen)\s*$/i))) ||
       (m = line.match(/^(?:Portionen|Personen|Menge|Ergibt)\s*:?\s*(\d+)/i))) {
     if (!meta.servings) {
       meta.servings = parseInt(m[1], 10);
@@ -146,6 +162,20 @@ function parseMeta(line, meta, section = 'head') {
   if (/^(?:Schwierigkeit|Schwierigkeitsgrad|Level)\b/i.test(line)) return true;
   if (/^(?:einfach|mittel|aufwendig|leicht|schwer)$/i.test(line)) return true;
   return false;
+}
+
+// Wenn Zutaten durch Leerzeilen getrennt sind (typisch für PDFs), gehören
+// direkt aufeinanderfolgende Zeilen zur selben Zutat (Zeilenumbruch).
+function mergeIngredientBlocks(lines) {
+  const blocks = [];
+  let cur = [];
+  for (const l of lines) {
+    if (l === '') { if (cur.length) blocks.push(cur); cur = []; } else cur.push(l);
+  }
+  if (cur.length) blocks.push(cur);
+  const nonEmpty = lines.filter(Boolean).length;
+  const blankStructured = blocks.length >= 3 && blocks.length >= nonEmpty * 0.6;
+  return blankStructured ? blocks.map((b) => b.join(' ')) : lines.filter(Boolean);
 }
 
 function joinQuantityLines(lines) {
@@ -190,8 +220,16 @@ export function parseRecipeText(input) {
   const meta = { title: '', servings: null, servingsUnit: 'Portionen', prepTime: null, totalTime: null };
   const head = [], ingr = [], steps = [];
   let section = 'head';
+  const expanded = [];
   for (const line of lines) {
-    if (!line) { if (section === 'steps') steps.push(''); continue; }
+    // "Arbeitszeit 10 Min. · Gesamtzeit 1 Std. · 4 Portionen" in Teile zerlegen
+    if (/\s[·•|]\s/.test(line) && /(arbeitszeit|gesamtzeit|zubereitungszeit|portion|personen)/i.test(line)) {
+      expanded.push(...line.split(/\s[·•|]\s/).map((x) => x.trim()));
+    } else expanded.push(line);
+  }
+  for (const line of expanded) {
+    if (!line) { if (section === 'steps' || section === 'ingr') (section === 'steps' ? steps : ingr).push(''); continue; }
+    if (isNoise(line)) continue;
     if (H_INGR.test(line) && line.length < 40) {
       section = 'ingr';
       const n = line.match(/(\d+)\s*(Portion|Person|Stück)/i); if (n) parseMeta(line, meta);
@@ -214,7 +252,7 @@ export function parseRecipeText(input) {
       else ingr.push(l);
     }
   } else {
-    meta.title = head[0] || '';
+    meta.title = head.find((l) => !NOT_TITLE.test(l) && l.length <= 100) || head[0] || '';
   }
 
   // Leerzeilen in Schritten: Absätze bilden, wenn keine Nummerierung
@@ -231,8 +269,8 @@ export function parseRecipeText(input) {
 
   return {
     ...meta,
-    title: meta.title.replace(/\s+-\s+Zaubertopf.*$/i, '').trim(),
-    ingredients: joinQuantityLines(ingr).filter((l) => !/^(?:drucken|teilen|merken|zur einkaufsliste)/i.test(l)),
+    title: meta.title.replace(/\s+[-–|]\s+(Zaubertopf|Thermomix|Cookidoo|Rezept).*$/i, '').trim(),
+    ingredients: joinQuantityLines(mergeIngredientBlocks(ingr)).filter((l) => !/^(?:drucken|teilen|merken|zur einkaufsliste)/i.test(l)),
     steps: splitSteps(stepLines),
   };
 }

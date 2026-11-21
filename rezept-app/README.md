@@ -52,8 +52,10 @@ und die normale Cookidoo-Anmeldung im Browser nutzt – es wird **kein Passwort*
 2. Vorschau prüfen → **„Kopieren & Cookidoo öffnen“**.
 3. Im Cookidoo-Tab das Lesezeichen noch einmal anklicken → **„In Cookidoo speichern“**.
 
-**Oder mit der HTML-Seite (zum genauen Bearbeiten):**
-1. Im Zaubertopf Club kopieren → in `petras-rezepte.html` einfügen → **Erkennen** → prüfen.
+**Oder mit der HTML-Seite – per PDF oder Text (zum genauen Bearbeiten):**
+1. Rezept als PDF speichern (im Browser **Strg + P → „Als PDF speichern“**) und die PDF in
+   `petras-rezepte.html` hineinziehen – oder Text kopieren und einfügen. Die App erkennt alles
+   automatisch und zeigt es zum Prüfen an.
 2. **„Für Cookidoo kopieren & öffnen“** – Cookidoo öffnet sich in einem neuen Tab.
 3. Dort auf das Lesezeichen klicken → **Strg + V** → **„In Cookidoo speichern“**.
 
@@ -107,4 +109,5 @@ npm test     # Parser- und Format-Tests (ohne Netz)
 ```
 Dateien: `public/parser.js` (Texterkennung), `lib/cookidoo-format.js` (Cookidoo-Datenformat),
 `server.js` (Server + Upload), `public/app.js` (Oberfläche),
-`lib/cookidoo-browser.js` + `pc/helper.js` + `pc/extract.js` (Lesezeichen-Helfer, Seite auslesen), `pc/build.mjs` (baut `dist/`).
+`lib/cookidoo-browser.js` + `pc/helper.js` + `pc/extract.js` (Lesezeichen-Helfer, Seite auslesen),
+`public/pdftext.js` + `public/vendor/` (PDF lesen mit pdf.js, Apache-2.0), `pc/build.mjs` (baut `dist/`).

@@ -69,3 +69,52 @@ test('Stück-Zutat ist keine Portionsangabe', () => {
   assert.equal(r.servings, null);
   assert.deepEqual(r.ingredients, ['4 Stück Eier', '500 g Mehl']);
 });
+
+test('PDF-Druckkopf und -fuß werden ignoriert', () => {
+  const r = parseRecipeText(`21.11.26, 19:35 Nimmersatt-Brot | Zaubertopf Club
+Nimmersatt-Brot | Zaubertopf Club
+1 Brot
+Zutaten
+500 g Wasser
+https://www.zaubertopf-club.de/rezept/nimmersatt-brot-thermomix.html 1/2
+Zubereitung
+1. Wasser 3 Min./37°C/Stufe 2 erwärmen.
+Seite 2 von 2
+2. Backen.`);
+  assert.equal(r.title, 'Nimmersatt-Brot');
+  assert.deepEqual(r.ingredients, ['500 g Wasser']);
+  assert.equal(r.steps.length, 2);
+});
+
+test('PDF-Struktur: Brotkrumen, Meta-Zeile, umbrochene Zutat', () => {
+  const r = parseRecipeText(`Startseite › Rezepte › Brot & Brötchen
+
+Nimmersatt-Brot
+
+⭐ 4,8 (312 Bewertungen)
+
+Arbeitszeit 10 Min. · Gesamtzeit 1 Std. 20 Min. · 1 Brot
+
+Zutaten
+
+500 g Wasser
+
+4 Stück Eier
+
+500 g Dinkelmehl
+Type 630
+
+100 g
+
+Sonnenblumenkerne
+
+Zubereitung
+
+1. Wasser 3 Min./37°C/Stufe 2
+erwärmen.
+2. Backen.`);
+  assert.equal(r.title, 'Nimmersatt-Brot');
+  assert.equal(r.prepTime, 10); assert.equal(r.totalTime, 80); assert.equal(r.servings, 1);
+  assert.deepEqual(r.ingredients, ['500 g Wasser', '4 Stück Eier', '500 g Dinkelmehl Type 630', '100 g Sonnenblumenkerne']);
+  assert.deepEqual(r.steps, ['Wasser 3 Min./37°C/Stufe 2 erwärmen.', 'Backen.']);
+});

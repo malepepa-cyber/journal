@@ -5,87 +5,155 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#2E6B3F">
 <meta name="robots" content="noindex,nofollow">
+<meta name="google" content="notranslate">
 <title>Petras Rezepte App</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="style.css">
 </head>
-<body>
-<header class="top">
-  <h1><span class="logo">🍲 </span>Petras Rezepte App</h1>
-  <span id="statusChip" class="chip">…</span>
-  <button id="btnSettings" class="iconbtn" aria-label="Einstellungen">⚙️</button>
+<body class="notranslate">
+<header class="appbar">
+  <div class="brand">
+    <svg class="logo" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="120" fill="currentColor"/><path d="M120 250h272v40c0 70-56 120-136 120s-136-50-136-120z" fill="#fff"/><rect x="96" y="226" width="320" height="32" rx="16" fill="#fff"/><path d="M200 120c-20 30 20 50 0 80M256 104c-20 34 20 56 0 96M312 120c-20 30 20 50 0 80" stroke="#fff" stroke-opacity=".7" stroke-width="18" fill="none" stroke-linecap="round"/></svg>
+    <span>Petras Rezepte</span>
+  </div>
+  <ol class="stepper" id="stepper" aria-label="Fortschritt">
+    <li data-step="1"><b>1</b><span>Rezept holen</span></li>
+    <li data-step="2"><b>2</b><span>Prüfen</span></li>
+    <li data-step="3"><b>3</b><span>Speichern</span></li>
+  </ol>
+  <button id="btnSetup" class="appbar-btn" title="Einrichten"><i id="statusDot" class="dot"></i><span>Einrichten</span></button>
 </header>
 
 <main>
-  <!-- Schritt 1: Einfügen -->
-  <section id="paneInput" class="card">
-    <h2><span class="num">1</span> Rezept einfügen</h2>
-    <p class="hint">Im Zaubertopf Club das Rezept markieren (Titel, Zutaten, Zubereitung), kopieren und hier einfügen.</p>
-    <textarea id="rawInput" rows="10" placeholder="Rezept hier einfügen …"></textarea>
-    <div class="row">
-      <button id="btnPaste" class="btn ghost">📋 Aus Zwischenablage</button>
-      <button id="btnParse" class="btn primary">Erkennen ➜</button>
+  <!-- ============ Schritt 1: Rezept holen ============ -->
+  <section id="viewImport" class="view">
+    <div id="setupBanner" class="banner hide">
+      <div><b>Einmal einrichten, dann geht's los.</b><br><span>Dauert eine Minute – danach landen Rezepte mit einem Klick in Cookidoo.</span></div>
+      <button class="btn primary" data-open-setup>Jetzt einrichten</button>
     </div>
-  </section>
 
-  <!-- Schritt 2: Prüfen -->
-  <section id="paneEdit" class="card hide">
-    <h2><span class="num">2</span> Prüfen &amp; anpassen</h2>
-    <label>Titel
-      <input id="fTitle" type="text" autocomplete="off">
+    <h1 class="hero">Welches Rezept kommt in den Thermomix?</h1>
+    <p class="hero-sub">PDF reinziehen oder Text einfügen – Zutaten, Schritte und Einstellungen erkennt die App automatisch.</p>
+
+    <label id="drop" class="dropzone" tabindex="0">
+      <input id="fileInput" type="file" accept="application/pdf,.pdf,text/plain,.txt" hidden>
+      <svg viewBox="0 0 24 24" class="drop-icon" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 2v6h6M12 18v-6M9 15l3-3 3 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="drop-title">PDF hierher ziehen</span>
+      <span class="drop-sub">oder <u>Datei auswählen</u></span>
+      <span id="dropBusy" class="drop-busy hide"><i class="spinner"></i> PDF wird gelesen …</span>
     </label>
-    <div class="grid3">
-      <label>Portionen <input id="fServings" type="number" min="1" inputmode="numeric"></label>
-      <label>Arbeitszeit (Min.) <input id="fPrep" type="number" min="0" inputmode="numeric"></label>
-      <label>Gesamtzeit (Min.) <input id="fTotal" type="number" min="0" inputmode="numeric"></label>
+
+    <div class="divider"><span>oder Text einfügen</span></div>
+
+    <div class="paste">
+      <textarea id="rawInput" rows="5" placeholder="Rezepttext hier einfügen (Strg + V) …"></textarea>
+      <div class="paste-actions">
+        <button id="btnPaste" class="btn ghost">Aus Zwischenablage</button>
+        <button id="btnParse" class="btn primary">Erkennen</button>
+      </div>
     </div>
 
-    <h3>Zutaten <small class="mut">– eine pro Zeile</small></h3>
-    <textarea id="fIngredients" rows="8"></textarea>
+    <details class="howto">
+      <summary>Wie bekomme ich ein Rezept als PDF?</summary>
+      <ol>
+        <li>Rezept im Zaubertopf Club öffnen.</li>
+        <li><kbd>Strg</kbd> + <kbd>P</kbd> drücken (Drucken).</li>
+        <li>Als Ziel <b>„Als PDF speichern“</b> wählen → <b>Speichern</b>.</li>
+        <li>Die PDF-Datei hier hineinziehen.</li>
+      </ol>
+    </details>
 
-    <h3>Arbeitsschritte</h3>
-    <p class="hint">Grün markiert = wird am TM6 als Knopf mit Zeit/Temperatur/Stufe angezeigt. Text ändern aktualisiert die Erkennung sofort.</p>
-    <ol id="stepList" class="steps"></ol>
-    <button id="btnAddStep" class="btn ghost small">＋ Schritt hinzufügen</button>
+    <section id="recent" class="recent hide">
+      <h2>Zuletzt gespeichert</h2>
+      <ul id="historyList"></ul>
+    </section>
   </section>
 
-  <!-- Schritt 3: Speichern -->
-  <section id="paneSave" class="card hide">
-    <h2><span class="num">3</span> In Cookidoo speichern</h2>
-    <div id="summary" class="summary"></div>
-    <div class="row">
-      <button id="btnUpload" class="btn primary big">☁️ In Cookidoo speichern</button>
+  <!-- ============ Schritt 2: Prüfen ============ -->
+  <section id="viewReview" class="view hide">
+    <div class="review-top">
+      <button id="btnBack" class="btn ghost small">← Anderes Rezept</button>
+      <span id="sourceInfo" class="source"></span>
     </div>
-    <div class="row">
-      <button id="btnCopy" class="btn ghost small">Als Text kopieren</button>
-      <button id="btnNew" class="btn ghost small">Neues Rezept</button>
-    </div>
-    <div id="result" class="result hide"></div>
-  </section>
 
-  <section id="paneHistory" class="card hide">
-    <h2>Zuletzt gespeichert</h2>
-    <ul id="historyList" class="history"></ul>
+    <article class="recipe">
+      <input id="fTitle" class="title-input" type="text" placeholder="Name des Rezepts" autocomplete="off">
+      <div class="meta">
+        <label class="meta-chip"><span>👥</span><input id="fServings" type="number" min="1" inputmode="numeric" placeholder="–"><em>Portionen</em></label>
+        <label class="meta-chip"><span>⏱</span><input id="fPrep" type="number" min="0" inputmode="numeric" placeholder="–"><em>Min. Arbeitszeit</em></label>
+        <label class="meta-chip"><span>🕒</span><input id="fTotal" type="number" min="0" inputmode="numeric" placeholder="–"><em>Min. gesamt</em></label>
+      </div>
+
+      <div class="cols">
+        <section class="panel">
+          <h2>Zutaten <span id="ingCount" class="count"></span></h2>
+          <ul id="ingList" class="ing-list"></ul>
+          <button id="btnAddIng" class="add">＋ Zutat</button>
+        </section>
+        <section class="panel">
+          <h2>Zubereitung <span id="stepCount" class="count"></span></h2>
+          <p class="legend"><span class="tm-pill sample">⏱ Zeit · 🌡 Temp. · ⚙ Stufe</span> = wird am TM6 als Knopf angezeigt</p>
+          <ol id="stepList" class="step-list"></ol>
+          <button id="btnAddStep" class="add">＋ Schritt</button>
+        </section>
+      </div>
+    </article>
   </section>
 </main>
 
-<dialog id="dlgSettings">
+<!-- Aktionsleiste -->
+<footer id="actionbar" class="actionbar hide">
+  <div id="summary" class="summary"></div>
+  <div class="actions">
+    <button id="btnCopy" class="btn ghost">Text kopieren</button>
+    <button id="btnUpload" class="btn primary big">In Cookidoo speichern</button>
+  </div>
+</footer>
+
+<!-- Ergebnis -->
+<dialog id="dlgResult" class="sheet">
+  <div id="resultBody"></div>
+  <form method="dialog" class="sheet-actions">
+    <button value="new" class="btn ghost">Nächstes Rezept</button>
+    <button value="ok" class="btn primary">Schließen</button>
+  </form>
+</dialog>
+
+<!-- Einrichten (PC-Version: Lesezeichen) -->
+<dialog id="dlgSetupPc" class="sheet">
+  <h2>Einmalig einrichten</h2>
+  <ol class="setup-steps">
+    <li><b>Lesezeichenleiste einblenden:</b> <kbd>Strg</kbd> + <kbd>Umschalt</kbd> + <kbd>B</kbd></li>
+    <li><b>Diesen Knopf in die Lesezeichenleiste ziehen</b> (mit der Maus festhalten und hochziehen):
+      <div class="bm-wrap"><a id="bmLink" class="bm" href="#bookmarklet" draggable="true">➜ Petras Rezepte</a></div></li>
+    <li><b>Bei <a href="https://cookidoo.de" target="_blank" rel="noopener">cookidoo.de</a> anmelden</b> – mit Petras Konto (bleibt gespeichert).</li>
+  </ol>
+  <p class="hint">Danach kann man auch direkt auf einer Rezeptseite im Zaubertopf Club auf das Lesezeichen klicken – ganz ohne PDF.</p>
+  <form method="dialog" class="sheet-actions">
+    <button value="cancel" class="btn ghost">Später</button>
+    <button value="done" class="btn primary">Fertig eingerichtet</button>
+  </form>
+</dialog>
+
+<!-- Einrichten (Server-Version) -->
+<dialog id="dlgSetupServer" class="sheet">
   <form method="dialog">
-    <h2>Einstellungen</h2>
-    <label>App-PIN <input id="sPin" type="password" inputmode="numeric" autocomplete="off"></label>
-    <label>Server-Adresse <small class="mut">(leer = diese Seite)</small>
+    <h2>Verbindung</h2>
+    <label class="field">App-PIN <input id="sPin" type="password" inputmode="numeric" autocomplete="off"></label>
+    <label class="field">Server-Adresse <small>(leer = diese Seite)</small>
       <input id="sServer" type="url" placeholder="https://…" autocomplete="off"></label>
     <p id="sInfo" class="hint"></p>
-    <div class="row">
+    <div class="sheet-actions">
       <button id="btnCheck" type="button" class="btn ghost">Verbindung testen</button>
       <button value="ok" class="btn primary">Speichern</button>
     </div>
   </form>
 </dialog>
 
-<div id="toast" class="toast hide"></div>
+<div id="dragOverlay" class="drag-overlay hide"><div>PDF hier loslassen</div></div>
+<div id="toast" class="toast hide" role="status"></div>
 <script type="module" src="app.js"></script>
 </body>
 </html>

@@ -57,45 +57,28 @@ ${helperBundle}
 `;
 
 // ---- HTML-Seite ----
+const pdftext = strip(await read('public/pdftext.js'));
+const pdfLib = await read('public/vendor/pdf.min.js');
+const pdfWorker = await read('public/vendor/pdf.worker.min.js');
+for (const [n, c] of [['pdf.min.js', pdfLib], ['pdf.worker.min.js', pdfWorker]]) {
+  if (/<\/script/i.test(c)) throw new Error(`${n} enthält </script – kann nicht eingebettet werden`);
+}
 let html = await read('public/index.html');
-const install = `
-  <section class="card" id="paneInstall">
-    <h2>🔖 Einmalig einrichten</h2>
-    <p class="hint">Damit das Speichern klappt, kommt ein Lesezeichen in die Lesezeichenleiste
-      (Leiste einblenden: <b>Strg + Umschalt + B</b>).</p>
-    <ol class="install">
-      <li>Diesen grünen Knopf mit der Maus <b>in die Lesezeichenleiste ziehen</b>:<br>
-        <a class="bm" href="${bookmarklet}" onclick="alert('Bitte nicht anklicken, sondern in die Lesezeichenleiste ziehen.');return false;">➜ Petras Rezepte</a></li>
-      <li>Auf <a href="https://cookidoo.de" target="_blank" rel="noopener">cookidoo.de</a> mit Petras Konto anmelden (bleibt gespeichert).</li>
-    </ol>
-    <h3>⚡ Am schnellsten: direkt von der Rezeptseite</h3>
-    <ol class="install">
-      <li>Rezept im Zaubertopf Club öffnen → Lesezeichen <b>„➜ Petras Rezepte“</b> anklicken.</li>
-      <li>Vorschau prüfen → <b>„Kopieren &amp; Cookidoo öffnen“</b>.</li>
-      <li>Im Cookidoo-Tab das Lesezeichen <b>noch einmal</b> anklicken → <b>„In Cookidoo speichern“</b>.</li>
-    </ol>
-    <details><summary>Oder mit dieser Seite (zum genauen Bearbeiten)</summary>
-      <p class="hint">Rezept unten einfügen → <b>Erkennen</b> → prüfen → <b>„Für Cookidoo kopieren &amp; öffnen“</b>
-      → auf cookidoo.de das Lesezeichen anklicken → <b>„In Cookidoo speichern“</b>.</p></details>
-    <details><summary>Lesezeichen funktioniert nicht?</summary>
-      <p class="hint">Dann die Browser-Erweiterung <b>Tampermonkey</b> installieren und die Datei
-      <code>petras-rezepte-helfer.user.js</code> öffnen. Danach erscheint auf cookidoo.de unten rechts ein Knopf
-      „🍲 Petras Rezepte“.</p></details>
-  </section>
-`;
 html = html
   .replace(/\s*<link rel="manifest"[^>]*>/, '')
   .replace(/\s*<link rel="apple-touch-icon"[^>]*>/, '')
   .replace(/<link rel="icon"[^>]*>/, () => `<link rel="icon" href="data:image/svg+xml,${encodeURIComponent(svg.trim())}">`)
-  .replace(/<link rel="stylesheet"[^>]*>/, () => `<style>\n${css}
-.install li{margin:10px 0}
-.bm{display:inline-block;margin-top:6px;background:var(--brand);color:#fff!important;padding:10px 16px;border-radius:10px;font-weight:700;text-decoration:none;cursor:grab}
-details{margin-top:8px}summary{cursor:pointer;color:var(--brand2)}
-</style>`)
-  .replace('<main>', () => `<main>${install}`)
-  .replace(/<script type="module" src="app.js"><\/script>/,
-    () => `<script>window.PETRAS_STANDALONE = true;</script>\n<script>\n(()=>{\n${parser}\n${app}\n})();\n</script>`);
-html = html.replace('<title>', () => `<!-- Petras Rezepte App – PC-Version ${version} (gebaut mit pc/build.mjs) -->\n<title>`);
+  .replace(/<link rel="stylesheet"[^>]*>/, () => `<style>\n${css}\n</style>`)
+  .replace('href="#bookmarklet"', () => `href="${bookmarklet.replace(/"/g, '%22')}"`)
+  .replace(/<script type="module" src="app.js"><\/script>/, () => [
+    // pdf.js (Apache-2.0, Mozilla) – wird erst beim ersten PDF geladen
+    `<script type="text/plain" id="pdfjs-lib">${pdfLib}</script>`,
+    `<script type="text/plain" id="pdfjs-worker">${pdfWorker}</script>`,
+    '<script>window.PETRAS_STANDALONE = true;</script>',
+    `<script>\n(()=>{\n${parser}\n${pdftext}\n${app}\n})();\n</script>`,
+  ].join('\n'));
+if (!html.includes('javascript:')) throw new Error('Lesezeichen nicht eingesetzt');
+html = html.replace('<title>', () => `<!-- Petras Rezepte App – PC-Version ${version} (gebaut mit pc/build.mjs). Enthält pdf.js (Apache-2.0). -->\n<title>`);
 
 await mkdir(new URL('dist/', root), { recursive: true });
 await writeFile(new URL('dist/petras-rezepte.html', root), html);
