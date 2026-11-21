@@ -35,7 +35,7 @@ async function refreshStatus() {
   const chip = $('statusChip');
   try {
     const s = await api('/api/status');
-    chip.textContent = s.configured ? 'Server bereit' : 'Server ohne Zugangsdaten';
+    chip.textContent = s.configured ? '✓ bereit' : '⚠ Setup';
     chip.className = `chip ${s.configured ? 'ok' : 'err'}`;
     $('sInfo').textContent = `Cookidoo: ${s.market}${s.pinRequired ? ' · PIN erforderlich' : ''}`;
     return s;
