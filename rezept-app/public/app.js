@@ -233,7 +233,7 @@ const shared = new URLSearchParams(location.search);
 const sharedText = [shared.get('title'), shared.get('text')].filter(Boolean).join('\n');
 const draft = store.get('rb.draft', null);
 if (sharedText) {
-  // Über Android „Teilen“ → Rezept-Brücke geschickt
+  // Über Android „Teilen“ → Petras Rezepte App geschickt
   $('rawInput').value = sharedText;
   history.replaceState(null, '', location.pathname);
   $('btnParse').click();

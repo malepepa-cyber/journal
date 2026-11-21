@@ -1,6 +1,6 @@
 {
-  "name": "Rezept-Brücke",
-  "short_name": "Rezepte",
+  "name": "Petras Rezepte App",
+  "short_name": "Petras Rezepte",
   "description": "Rezepte einfügen und in Cookidoo speichern",
   "start_url": "./",
   "scope": "./",

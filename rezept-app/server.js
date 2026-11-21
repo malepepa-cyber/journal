@@ -1,4 +1,4 @@
-// Rezept-Brücke – kleiner Server
+// Petras Rezepte App – kleiner Server
 // * liefert die Web-App (Ordner public/) aus
 // * nimmt ein geprüftes Rezept entgegen und speichert es über die
 //   (inoffizielle) Cookidoo-Schnittstelle unter "Meine Kreationen".
@@ -178,5 +178,5 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`Rezept-Brücke läuft auf http://localhost:${PORT}  →  ${BASE_URL} (${LANGUAGE})`);
+  console.log(`Petras Rezepte App läuft auf http://localhost:${PORT}  →  ${BASE_URL} (${LANGUAGE})`);
 });

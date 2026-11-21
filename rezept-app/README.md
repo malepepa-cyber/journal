@@ -1,4 +1,4 @@
-# 🍲 Rezept-Brücke
+# 🍲 Petras Rezepte App
 
 Rezepte aus dem **Zaubertopf Club** (oder jeder anderen Seite) kopieren, in die App
 einfügen, prüfen – und mit einem Tipp als **eigenes Rezept in Cookidoo** speichern.
@@ -14,7 +14,7 @@ Handy/Tablet (Web-App)  ──►  kleiner Server (server.js)  ──►  cookid
 ```
 
 1. **Einfügen** – Text aus dem Zaubertopf Club kopieren und einfügen
-   (oder in Chrome/Android: *Teilen → Rezept-Brücke*).
+   (oder in Chrome/Android: *Teilen → Petras Rezepte App*).
 2. **Prüfen** – Titel, Portionen, Zeiten, Zutaten und Schritte werden erkannt.
    Unter jedem Schritt steht, was am TM6 als Knopf erscheint, z. B.
    `⚙ 3 Min. · 120 °C · Linkslauf · Stufe 1`. Alles ist editierbar.
@@ -59,8 +59,8 @@ Nachteil: Termux muss laufen, wenn sie speichern will (später einfach `cd journ
 ```sh
 cd rezept-app
 cp .env.example .env   # ausfüllen
-docker build -t rezept-bruecke .
-docker run -d --restart unless-stopped --env-file .env -p 8080:8080 rezept-bruecke
+docker build -t petras-rezepte-app .
+docker run -d --restart unless-stopped --env-file .env -p 8080:8080 petras-rezepte-app
 ```
 Auf Handy und Tablet `http://<IP-des-Rechners>:8080` öffnen und zum Startbildschirm hinzufügen.
 

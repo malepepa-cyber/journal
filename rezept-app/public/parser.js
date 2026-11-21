@@ -1,4 +1,4 @@
-// Rezept-Brücke – Parser für deutschsprachige Thermomix-Rezepte
+// Petras Rezepte App – Parser für deutschsprachige Thermomix-Rezepte
 // (z. B. kopiert aus dem Zaubertopf Club).
 //
 // Läuft im Browser und in Node (ES-Modul, keine Abhängigkeiten).
