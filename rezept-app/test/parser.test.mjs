@@ -63,3 +63,9 @@ Mit Basilikum servieren.`);
   assert.equal(r.steps.length, 4);
   assert.match(r.steps[2], /garen\. Danach abschmecken\.$/);
 });
+
+test('Stück-Zutat ist keine Portionsangabe', () => {
+  const r = parseRecipeText('Brot\nZutaten\n4 Stück Eier\n500 g Mehl\nZubereitung\n1. Alles 2 Min./Teigstufe kneten.\n2. Backen.');
+  assert.equal(r.servings, null);
+  assert.deepEqual(r.ingredients, ['4 Stück Eier', '500 g Mehl']);
+});

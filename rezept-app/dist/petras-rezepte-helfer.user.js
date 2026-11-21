@@ -135,8 +135,10 @@ function cleanLine(l) {
     .trim();
 }
 
-function parseMeta(line, meta) {
+function parseMeta(line, meta, section = 'head') {
   let m;
+  // In der Zutatenliste nur eindeutige Zeilen wie "4 Portionen" (nicht "4 Stück Eier")
+  if (section === 'ingr' && !/^(?:\d+\s*(?:Portion(?:en)?|Personen)\s*$|(?:Portionen|Personen|Arbeitszeit|Vorbereitungszeit|Zubereitungszeit|Gesamtzeit)\b)/i.test(line)) return false;
   if ((m = line.match(/(\d+)\s*(?:Portion(?:en)?|Personen|Pers\.|Stück|Stk\.?)\b/i)) ||
       (m = line.match(/^(?:Portionen|Personen|Menge|Ergibt)\s*:?\s*(\d+)/i))) {
     if (!meta.servings) {
@@ -209,7 +211,7 @@ function parseRecipeText(input) {
     if (H_STEPS.test(line) && line.length < 40) { section = 'steps'; continue; }
     if (H_STOP.test(line)) { section = 'stop'; continue; }
     if (section === 'stop') continue;
-    if (section !== 'steps' && parseMeta(line, meta)) continue;
+    if (section !== 'steps' && parseMeta(line, meta, section)) continue;
     if (section === 'head') head.push(line);
     else if (section === 'ingr') ingr.push(line);
     else steps.push(line);
@@ -391,19 +393,121 @@ async function saveRecipeInBrowser(recipe, lang = detectLanguage()) {
   throw err;
 }
 
-// Lesezeichen-Helfer: öffnet auf cookidoo.de ein kleines Fenster, in das man
-// das Rezept einfügt (aus der PC-Seite kopiert ODER direkt aus dem Zaubertopf Club)
-// und speichert es mit der bestehenden Cookidoo-Anmeldung.
+// Liest ein Rezept direkt aus der geöffneten Webseite (z. B. Zaubertopf Club).
+// Reihenfolge: 1) markierter Text  2) schema.org-Rezeptdaten (JSON-LD)
+//              3) bekannte Rezept-Bausteine (itemprop / WP Recipe Maker / Tasty)
+//              4) Text des Hauptbereichs → Text-Erkennung
+
+const clean = (s) => String(s ?? '')
+  .replace(/<[^>]+>/g, ' ')
+  .replace(/&nbsp;| /g, ' ')
+  .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'")
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+/** "PT1H10M" → 70 (Minuten) */
+function isoMinutes(v) {
+  const m = String(v || '').match(/^P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/i);
+  if (!m) { const s = parseDuration(String(v || '')); return s ? Math.round(s / 60) : null; }
+  const min = (+m[1] || 0) * 1440 + (+m[2] || 0) * 60 + (+m[3] || 0) + Math.round((+m[4] || 0) / 60);
+  return min || null;
+}
+
+function flattenInstructions(x, out = []) {
+  if (!x) return out;
+  if (typeof x === 'string') {
+    // manchmal alle Schritte in einem String mit Zeilenumbrüchen
+    x.split(/\n+/).map(clean).filter(Boolean).forEach((s) => out.push(s));
+  } else if (Array.isArray(x)) {
+    x.forEach((i) => flattenInstructions(i, out));
+  } else if (typeof x === 'object') {
+    if (x.itemListElement) flattenInstructions(x.itemListElement, out);
+    else if (x.text || x.name) out.push(clean(x.text || x.name));
+  }
+  return out;
+}
+
+function findRecipeNode(node) {
+  if (!node || typeof node !== 'object') return null;
+  if (Array.isArray(node)) { for (const n of node) { const r = findRecipeNode(n); if (r) return r; } return null; }
+  const t = node['@type'];
+  if (t === 'Recipe' || (Array.isArray(t) && t.includes('Recipe'))) return node;
+  return findRecipeNode(node['@graph']) || findRecipeNode(node.mainEntity) || null;
+}
+
+function fromJsonLd(doc) {
+  for (const s of doc.querySelectorAll('script[type="application/ld+json"]')) {
+    let data; try { data = JSON.parse(s.textContent); } catch { continue; }
+    const r = findRecipeNode(data);
+    if (!r) continue;
+    const yieldRaw = Array.isArray(r.recipeYield) ? r.recipeYield.join(' ') : String(r.recipeYield ?? '');
+    const servings = parseInt(yieldRaw.match(/\d+/)?.[0], 10) || null;
+    return {
+      source: 'Rezeptdaten (schema.org)',
+      title: clean(r.name),
+      servings,
+      prepTime: isoMinutes(r.prepTime),
+      totalTime: isoMinutes(r.totalTime),
+      ingredients: (r.recipeIngredient || r.ingredients || []).map(clean).filter(Boolean),
+      steps: flattenInstructions(r.recipeInstructions),
+    };
+  }
+  return null;
+}
+
+const texts = (doc, sel) => [...doc.querySelectorAll(sel)].map((e) => clean(e.innerText ?? e.textContent)).filter(Boolean);
+
+function fromMarkup(doc) {
+  const variants = [
+    { ingr: '[itemprop="recipeIngredient"],[itemprop="ingredients"]', steps: '[itemprop="recipeInstructions"] li,[itemprop="recipeInstructions"] p,[itemprop="step"]' },
+    { ingr: '.wprm-recipe-ingredient', steps: '.wprm-recipe-instruction-text' },
+    { ingr: '.tasty-recipes-ingredients li', steps: '.tasty-recipes-instructions li' },
+    { ingr: '[class*="ingredient"] li', steps: '[class*="instruction"] li, [class*="preparation"] li, [class*="step"] li' },
+  ];
+  for (const v of variants) {
+    const ingredients = texts(doc, v.ingr);
+    let steps = texts(doc, v.steps);
+    if (!steps.length) steps = texts(doc, '[itemprop="recipeInstructions"]').flatMap((t) => t.split(/\n+/));
+    if (ingredients.length >= 2 && steps.length >= 1) {
+      const title = clean(doc.querySelector('[itemprop="name"], .wprm-recipe-name, h1')?.textContent) || clean(doc.title);
+      const meta = parseRecipeText(`${title}\n${texts(doc, '[class*="servings"],[class*="portion"],[class*="time"]').join('\n')}`);
+      return { source: 'Rezept-Bausteine der Seite', title, servings: meta.servings, prepTime: meta.prepTime, totalTime: meta.totalTime, ingredients, steps };
+    }
+  }
+  return null;
+}
+
+function fromText(doc) {
+  const main = doc.querySelector('article, main, [role="main"]') || doc.body;
+  const text = main.innerText ?? main.textContent ?? '';
+  const r = parseRecipeText(text);
+  const h1 = clean(doc.querySelector('h1')?.textContent);
+  if (h1) r.title = h1;
+  return { source: 'Text der Seite', ...r };
+}
+
+/** Bestes Ergebnis für die aktuelle Seite. */
+function extractRecipeFromDocument(doc = document, win = globalThis) {
+  const sel = String(win.getSelection?.() || '').trim();
+  if (sel.length > 80) return { source: 'markierter Text', ...parseRecipeText(sel) };
+  const candidates = [fromJsonLd(doc), fromMarkup(doc)].filter(Boolean);
+  const good = candidates.find((r) => r.ingredients.length && r.steps.length);
+  if (good) return good;
+  return fromText(doc);
+}
+
+// Lesezeichen-Helfer – EIN Lesezeichen für beides:
+//  * auf einer Rezeptseite (z. B. Zaubertopf Club): liest das Rezept aus der Seite,
+//    zeigt eine Vorschau, kopiert es und öffnet Cookidoo.
+//  * auf cookidoo.de: Fenster zum Einfügen und Speichern mit der bestehenden Anmeldung.
 
 const MARK = 'PETRAS-REZEPT:';
+const COOKIDOO_URL = 'https://cookidoo.de/created-recipes/de-DE';
+const isCookidoo = () => /(^|\.)cookidoo\.[a-z.]+$/.test(location.hostname);
 
 function openHelper() {
-  if (!/(^|\.)cookidoo\.[a-z.]+$/.test(location.hostname)) {
-    if (confirm('Petras Rezepte App:\nBitte zuerst cookidoo.de öffnen (und anmelden), dann das Lesezeichen erneut anklicken.\n\nJetzt cookidoo.de öffnen?')) {
-      location.href = 'https://cookidoo.de/created-recipes/de-DE';
-    }
-    return;
-  }
+  const grab = !isCookidoo();
   const old = document.getElementById('petras-rezepte-helper');
   if (old) { old.remove(); return; }
 
@@ -435,10 +539,11 @@ function openHelper() {
   <div class="box">
     <header><b>🍲 Petras Rezepte → Cookidoo</b><button id="x" title="Schließen">✕</button></header>
     <main>
-      <p class="hint">Strg + V drücken, um das Rezept einzufügen – aus der Petras-Rezepte-Seite oder direkt aus dem Zaubertopf Club kopiert.</p>
+      <p class="hint" id="hint">Strg + V drücken, um das Rezept einzufügen – aus der Petras-Rezepte-Seite oder direkt aus dem Zaubertopf Club kopiert.</p>
       <textarea id="in" placeholder="Hier einfügen (Strg + V) …"></textarea>
       <div id="pv" class="preview"></div>
       <button id="save" class="btn" disabled>☁️ In Cookidoo speichern</button>
+      <button id="go" class="btn" style="display:none">➜ Kopieren &amp; Cookidoo öffnen</button>
       <div id="msg"></div>
     </main>
   </div>`;
@@ -495,11 +600,46 @@ function openHelper() {
     }
   });
 
+  if (grab) {
+    // Rezept aus der aktuellen Seite lesen
+    const r = extractRecipeFromDocument(document, window);
+    const clean = { title: r.title, servings: r.servings, prepTime: r.prepTime, totalTime: r.totalTime, ingredients: r.ingredients, steps: r.steps };
+    $('hint').innerHTML = `Rezept aus dieser Seite gelesen (Quelle: ${esc(r.source)}). Im Feld kann noch korrigiert werden.
+      <br>Tipp: Klappt es nicht richtig, das Rezept auf der Seite mit der Maus markieren und das Lesezeichen erneut klicken.`;
+    $('in').value = toText(clean);
+    $('save').style.display = 'none';
+    $('go').style.display = '';
+    update();
+    $('go').addEventListener('click', async () => {
+      if (!recipe) return;
+      const ok = await copy(MARK + JSON.stringify(recipe));
+      if (!ok) { $('msg').innerHTML = '<div class="msg err">❌ Kopieren nicht möglich.</div>'; return; }
+      window.open(COOKIDOO_URL, '_blank');
+      $('msg').innerHTML = `<div class="msg ok">✅ <b>Kopiert!</b> Cookidoo öffnet sich in einem neuen Tab.<br>
+        Dort das Lesezeichen <b>noch einmal</b> anklicken → <b>„In Cookidoo speichern“</b>.</div>`;
+    });
+    return;
+  }
   $('in').focus();
   // Wenn der Browser es erlaubt: Zwischenablage direkt übernehmen
   navigator.clipboard?.readText?.().then((t) => {
     if (t && !$('in').value) { $('in').value = t; update(); }
   }).catch(() => {});
+}
+
+function toText(r) {
+  return [r.title, r.servings ? `${r.servings} Portionen` : '', r.prepTime ? `Arbeitszeit ${r.prepTime} Min.` : '',
+    r.totalTime ? `Gesamtzeit ${r.totalTime} Min.` : '', 'Zutaten', ...(r.ingredients || []),
+    'Zubereitung', ...(r.steps || []).map((s, i) => `${i + 1}. ${s}`)].filter(Boolean).join('\n');
+}
+
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { /* Fallback */ }
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
+  document.body.appendChild(ta); ta.select();
+  let ok = false; try { ok = document.execCommand('copy'); } catch { /* egal */ }
+  ta.remove(); return ok;
 }
 
 // Aufruf erfolgt durch das Build-Skript (Lesezeichen bzw. Userscript).

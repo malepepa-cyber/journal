@@ -124,8 +124,10 @@ function cleanLine(l) {
     .trim();
 }
 
-function parseMeta(line, meta) {
+function parseMeta(line, meta, section = 'head') {
   let m;
+  // In der Zutatenliste nur eindeutige Zeilen wie "4 Portionen" (nicht "4 Stück Eier")
+  if (section === 'ingr' && !/^(?:\d+\s*(?:Portion(?:en)?|Personen)\s*$|(?:Portionen|Personen|Arbeitszeit|Vorbereitungszeit|Zubereitungszeit|Gesamtzeit)\b)/i.test(line)) return false;
   if ((m = line.match(/(\d+)\s*(?:Portion(?:en)?|Personen|Pers\.|Stück|Stk\.?)\b/i)) ||
       (m = line.match(/^(?:Portionen|Personen|Menge|Ergibt)\s*:?\s*(\d+)/i))) {
     if (!meta.servings) {
@@ -198,7 +200,7 @@ export function parseRecipeText(input) {
     if (H_STEPS.test(line) && line.length < 40) { section = 'steps'; continue; }
     if (H_STOP.test(line)) { section = 'stop'; continue; }
     if (section === 'stop') continue;
-    if (section !== 'steps' && parseMeta(line, meta)) continue;
+    if (section !== 'steps' && parseMeta(line, meta, section)) continue;
     if (section === 'head') head.push(line);
     else if (section === 'ingr') ingr.push(line);
     else steps.push(line);

@@ -1,18 +1,17 @@
-// Lesezeichen-Helfer: öffnet auf cookidoo.de ein kleines Fenster, in das man
-// das Rezept einfügt (aus der PC-Seite kopiert ODER direkt aus dem Zaubertopf Club)
-// und speichert es mit der bestehenden Cookidoo-Anmeldung.
+// Lesezeichen-Helfer – EIN Lesezeichen für beides:
+//  * auf einer Rezeptseite (z. B. Zaubertopf Club): liest das Rezept aus der Seite,
+//    zeigt eine Vorschau, kopiert es und öffnet Cookidoo.
+//  * auf cookidoo.de: Fenster zum Einfügen und Speichern mit der bestehenden Anmeldung.
 import { parseRecipeText, findOperations, describeOperation } from '../public/parser.js';
 import { saveRecipeInBrowser } from '../lib/cookidoo-browser.js';
+import { extractRecipeFromDocument } from './extract.js';
 
 const MARK = 'PETRAS-REZEPT:';
+const COOKIDOO_URL = 'https://cookidoo.de/created-recipes/de-DE';
+const isCookidoo = () => /(^|\.)cookidoo\.[a-z.]+$/.test(location.hostname);
 
 function openHelper() {
-  if (!/(^|\.)cookidoo\.[a-z.]+$/.test(location.hostname)) {
-    if (confirm('Petras Rezepte App:\nBitte zuerst cookidoo.de öffnen (und anmelden), dann das Lesezeichen erneut anklicken.\n\nJetzt cookidoo.de öffnen?')) {
-      location.href = 'https://cookidoo.de/created-recipes/de-DE';
-    }
-    return;
-  }
+  const grab = !isCookidoo();
   const old = document.getElementById('petras-rezepte-helper');
   if (old) { old.remove(); return; }
 
@@ -44,10 +43,11 @@ function openHelper() {
   <div class="box">
     <header><b>🍲 Petras Rezepte → Cookidoo</b><button id="x" title="Schließen">✕</button></header>
     <main>
-      <p class="hint">Strg + V drücken, um das Rezept einzufügen – aus der Petras-Rezepte-Seite oder direkt aus dem Zaubertopf Club kopiert.</p>
+      <p class="hint" id="hint">Strg + V drücken, um das Rezept einzufügen – aus der Petras-Rezepte-Seite oder direkt aus dem Zaubertopf Club kopiert.</p>
       <textarea id="in" placeholder="Hier einfügen (Strg + V) …"></textarea>
       <div id="pv" class="preview"></div>
       <button id="save" class="btn" disabled>☁️ In Cookidoo speichern</button>
+      <button id="go" class="btn" style="display:none">➜ Kopieren &amp; Cookidoo öffnen</button>
       <div id="msg"></div>
     </main>
   </div>`;
@@ -104,11 +104,46 @@ function openHelper() {
     }
   });
 
+  if (grab) {
+    // Rezept aus der aktuellen Seite lesen
+    const r = extractRecipeFromDocument(document, window);
+    const clean = { title: r.title, servings: r.servings, prepTime: r.prepTime, totalTime: r.totalTime, ingredients: r.ingredients, steps: r.steps };
+    $('hint').innerHTML = `Rezept aus dieser Seite gelesen (Quelle: ${esc(r.source)}). Im Feld kann noch korrigiert werden.
+      <br>Tipp: Klappt es nicht richtig, das Rezept auf der Seite mit der Maus markieren und das Lesezeichen erneut klicken.`;
+    $('in').value = toText(clean);
+    $('save').style.display = 'none';
+    $('go').style.display = '';
+    update();
+    $('go').addEventListener('click', async () => {
+      if (!recipe) return;
+      const ok = await copy(MARK + JSON.stringify(recipe));
+      if (!ok) { $('msg').innerHTML = '<div class="msg err">❌ Kopieren nicht möglich.</div>'; return; }
+      window.open(COOKIDOO_URL, '_blank');
+      $('msg').innerHTML = `<div class="msg ok">✅ <b>Kopiert!</b> Cookidoo öffnet sich in einem neuen Tab.<br>
+        Dort das Lesezeichen <b>noch einmal</b> anklicken → <b>„In Cookidoo speichern“</b>.</div>`;
+    });
+    return;
+  }
   $('in').focus();
   // Wenn der Browser es erlaubt: Zwischenablage direkt übernehmen
   navigator.clipboard?.readText?.().then((t) => {
     if (t && !$('in').value) { $('in').value = t; update(); }
   }).catch(() => {});
+}
+
+function toText(r) {
+  return [r.title, r.servings ? `${r.servings} Portionen` : '', r.prepTime ? `Arbeitszeit ${r.prepTime} Min.` : '',
+    r.totalTime ? `Gesamtzeit ${r.totalTime} Min.` : '', 'Zutaten', ...(r.ingredients || []),
+    'Zubereitung', ...(r.steps || []).map((s, i) => `${i + 1}. ${s}`)].filter(Boolean).join('\n');
+}
+
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { /* Fallback */ }
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
+  document.body.appendChild(ta); ta.select();
+  let ok = false; try { ok = document.execCommand('copy'); } catch { /* egal */ }
+  ta.remove(); return ok;
 }
 
 // Aufruf erfolgt durch das Build-Skript (Lesezeichen bzw. Userscript).

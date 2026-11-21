@@ -18,6 +18,7 @@ function strip(code) {
 const parser = strip(await read('public/parser.js'));
 const format = strip(await read('lib/cookidoo-format.js'));
 const browser = strip(await read('lib/cookidoo-browser.js'));
+const extract = strip(await read('pc/extract.js'));
 const helper = strip(await read('pc/helper.js'));
 const app = strip(await read('public/app.js'));
 const css = await read('public/style.css');
@@ -25,7 +26,7 @@ const svg = await read('public/icon.svg');
 const version = new Date().toISOString().slice(0, 10);
 
 // ---- Lesezeichen ----
-const helperBundle = `${parser}\n${format}\n${browser}\n${helper}`;
+const helperBundle = `${parser}\n${format}\n${browser}\n${extract}\n${helper}`;
 const bookmarkletCode = `(()=>{\n${helperBundle}\nopenHelper();\n})();`;
 // Zeilenkommentare entfernen, damit nichts durch Zeilenumbrüche kaputtgeht.
 const bookmarklet = 'javascript:' + encodeURIComponent(
@@ -64,14 +65,18 @@ const install = `
       (Leiste einblenden: <b>Strg + Umschalt + B</b>).</p>
     <ol class="install">
       <li>Diesen grünen Knopf mit der Maus <b>in die Lesezeichenleiste ziehen</b>:<br>
-        <a class="bm" href="${bookmarklet}" onclick="alert('Bitte nicht anklicken, sondern in die Lesezeichenleiste ziehen.');return false;">➜ Petras Rezepte speichern</a></li>
+        <a class="bm" href="${bookmarklet}" onclick="alert('Bitte nicht anklicken, sondern in die Lesezeichenleiste ziehen.');return false;">➜ Petras Rezepte</a></li>
       <li>Auf <a href="https://cookidoo.de" target="_blank" rel="noopener">cookidoo.de</a> mit Petras Konto anmelden (bleibt gespeichert).</li>
-      <li>Fertig. Ab jetzt: Rezept hier einfügen → prüfen → <b>„Für Cookidoo kopieren &amp; öffnen“</b>
-        → auf cookidoo.de das Lesezeichen anklicken → <b>Strg + V</b> → speichern.</li>
     </ol>
-    <details><summary>Tipp: Geht auch ohne diese Seite</summary>
-      <p class="hint">Man kann das Rezept im Zaubertopf Club kopieren, direkt auf cookidoo.de das Lesezeichen anklicken
-      und dort einfügen – die Erkennung ist im Lesezeichen eingebaut.</p></details>
+    <h3>⚡ Am schnellsten: direkt von der Rezeptseite</h3>
+    <ol class="install">
+      <li>Rezept im Zaubertopf Club öffnen → Lesezeichen <b>„➜ Petras Rezepte“</b> anklicken.</li>
+      <li>Vorschau prüfen → <b>„Kopieren &amp; Cookidoo öffnen“</b>.</li>
+      <li>Im Cookidoo-Tab das Lesezeichen <b>noch einmal</b> anklicken → <b>„In Cookidoo speichern“</b>.</li>
+    </ol>
+    <details><summary>Oder mit dieser Seite (zum genauen Bearbeiten)</summary>
+      <p class="hint">Rezept unten einfügen → <b>Erkennen</b> → prüfen → <b>„Für Cookidoo kopieren &amp; öffnen“</b>
+      → auf cookidoo.de das Lesezeichen anklicken → <b>„In Cookidoo speichern“</b>.</p></details>
     <details><summary>Lesezeichen funktioniert nicht?</summary>
       <p class="hint">Dann die Browser-Erweiterung <b>Tampermonkey</b> installieren und die Datei
       <code>petras-rezepte-helfer.user.js</code> öffnen. Danach erscheint auf cookidoo.de unten rechts ein Knopf

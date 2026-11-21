@@ -42,16 +42,20 @@ und die normale Cookidoo-Anmeldung im Browser nutzt – es wird **kein Passwort*
 
 **Einmalig:**
 1. `petras-rezepte.html` öffnen, Lesezeichenleiste einblenden (**Strg + Umschalt + B**).
-2. Den grünen Knopf **„➜ Petras Rezepte speichern“** in die Lesezeichenleiste **ziehen**.
+2. Den grünen Knopf **„➜ Petras Rezepte“** in die Lesezeichenleiste **ziehen**.
 3. Auf cookidoo.de mit Petras Konto anmelden.
 
-**Jedes Rezept:**
+**Am schnellsten – direkt von der Rezeptseite:**
+1. Rezept im Zaubertopf Club öffnen → Lesezeichen **„➜ Petras Rezepte“** anklicken.
+   Das Rezept wird aus der Seite gelesen (schema.org-Rezeptdaten, sonst der Seitentext;
+   wer vorher den Rezepttext markiert, bestimmt selbst, was gelesen wird).
+2. Vorschau prüfen → **„Kopieren & Cookidoo öffnen“**.
+3. Im Cookidoo-Tab das Lesezeichen noch einmal anklicken → **„In Cookidoo speichern“**.
+
+**Oder mit der HTML-Seite (zum genauen Bearbeiten):**
 1. Im Zaubertopf Club kopieren → in `petras-rezepte.html` einfügen → **Erkennen** → prüfen.
 2. **„Für Cookidoo kopieren & öffnen“** – Cookidoo öffnet sich in einem neuen Tab.
 3. Dort auf das Lesezeichen klicken → **Strg + V** → **„In Cookidoo speichern“**.
-
-Abkürzung: Man kann auch direkt aus dem Zaubertopf Club kopieren, auf cookidoo.de das
-Lesezeichen klicken und dort einfügen – die Erkennung steckt auch im Lesezeichen.
 
 Falls der Browser das Lesezeichen blockiert: Erweiterung **Tampermonkey** installieren und
 `dist/petras-rezepte-helfer.user.js` öffnen → auf cookidoo.de erscheint unten rechts ein Knopf.
@@ -103,4 +107,4 @@ npm test     # Parser- und Format-Tests (ohne Netz)
 ```
 Dateien: `public/parser.js` (Texterkennung), `lib/cookidoo-format.js` (Cookidoo-Datenformat),
 `server.js` (Server + Upload), `public/app.js` (Oberfläche),
-`lib/cookidoo-browser.js` + `pc/helper.js` (Lesezeichen-Helfer), `pc/build.mjs` (baut `dist/`).
+`lib/cookidoo-browser.js` + `pc/helper.js` + `pc/extract.js` (Lesezeichen-Helfer, Seite auslesen), `pc/build.mjs` (baut `dist/`).

@@ -154,7 +154,9 @@ $('btnPaste').addEventListener('click', async () => {
 $('btnParse').addEventListener('click', () => {
   const raw = $('rawInput').value;
   if (!raw.trim()) return toast('Bitte zuerst ein Rezept einfügen');
-  const r = parseRecipeText(raw);
+  let r = null;
+  if (raw.trim().startsWith(MARK)) { try { r = JSON.parse(raw.trim().slice(MARK.length)); } catch { /* normal weiter */ } }
+  if (!r) r = parseRecipeText(raw);
   fillForm(r);
   saveDraft();
   $('paneEdit').scrollIntoView({ behavior: 'smooth' });
@@ -200,7 +202,7 @@ async function prepareForCookidoo() {
   out.innerHTML = ok
     ? `✅ <b>Rezept kopiert – Cookidoo wird geöffnet.</b>
        <ol><li>Auf cookidoo.de angemeldet sein.</li>
-       <li>In der Lesezeichenleiste auf <b>„➜ Petras Rezepte speichern“</b> klicken.</li>
+       <li>In der Lesezeichenleiste auf <b>„➜ Petras Rezepte“</b> klicken.</li>
        <li>Ins Feld klicken, <b>Strg + V</b> drücken, dann <b>„In Cookidoo speichern“</b>.</li></ol>`
     : '❌ Kopieren hat nicht geklappt. Bitte „Als Text kopieren“ versuchen.';
   out.className = `result ${ok ? 'ok' : 'err'}`;
