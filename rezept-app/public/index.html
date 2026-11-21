@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2E6B3F">
+<meta name="robots" content="noindex,nofollow">
+<title>Rezept-Brücke</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <h1>🍲 Rezept-Brücke</h1>
+  <span id="statusChip" class="chip">…</span>
+  <button id="btnSettings" class="iconbtn" aria-label="Einstellungen">⚙️</button>
+</header>
+
+<main>
+  <!-- Schritt 1: Einfügen -->
+  <section id="paneInput" class="card">
+    <h2><span class="num">1</span> Rezept einfügen</h2>
+    <p class="hint">Im Zaubertopf Club das Rezept markieren (Titel, Zutaten, Zubereitung), kopieren und hier einfügen.</p>
+    <textarea id="rawInput" rows="10" placeholder="Rezept hier einfügen …"></textarea>
+    <div class="row">
+      <button id="btnPaste" class="btn ghost">📋 Aus Zwischenablage</button>
+      <button id="btnParse" class="btn primary">Erkennen ➜</button>
+    </div>
+  </section>
+
+  <!-- Schritt 2: Prüfen -->
+  <section id="paneEdit" class="card hide">
+    <h2><span class="num">2</span> Prüfen &amp; anpassen</h2>
+    <label>Titel
+      <input id="fTitle" type="text" autocomplete="off">
+    </label>
+    <div class="grid3">
+      <label>Portionen <input id="fServings" type="number" min="1" inputmode="numeric"></label>
+      <label>Arbeitszeit (Min.) <input id="fPrep" type="number" min="0" inputmode="numeric"></label>
+      <label>Gesamtzeit (Min.) <input id="fTotal" type="number" min="0" inputmode="numeric"></label>
+    </div>
+
+    <h3>Zutaten <small class="mut">– eine pro Zeile</small></h3>
+    <textarea id="fIngredients" rows="8"></textarea>
+
+    <h3>Arbeitsschritte</h3>
+    <p class="hint">Grün markiert = wird am TM6 als Knopf mit Zeit/Temperatur/Stufe angezeigt. Text ändern aktualisiert die Erkennung sofort.</p>
+    <ol id="stepList" class="steps"></ol>
+    <button id="btnAddStep" class="btn ghost small">＋ Schritt hinzufügen</button>
+  </section>
+
+  <!-- Schritt 3: Speichern -->
+  <section id="paneSave" class="card hide">
+    <h2><span class="num">3</span> In Cookidoo speichern</h2>
+    <div id="summary" class="summary"></div>
+    <div class="row">
+      <button id="btnUpload" class="btn primary big">☁️ In Cookidoo speichern</button>
+    </div>
+    <div class="row">
+      <button id="btnCopy" class="btn ghost small">Als Text kopieren</button>
+      <button id="btnNew" class="btn ghost small">Neues Rezept</button>
+    </div>
+    <div id="result" class="result hide"></div>
+  </section>
+
+  <section id="paneHistory" class="card hide">
+    <h2>Zuletzt gespeichert</h2>
+    <ul id="historyList" class="history"></ul>
+  </section>
+</main>
+
+<dialog id="dlgSettings">
+  <form method="dialog">
+    <h2>Einstellungen</h2>
+    <label>App-PIN <input id="sPin" type="password" inputmode="numeric" autocomplete="off"></label>
+    <label>Server-Adresse <small class="mut">(leer = diese Seite)</small>
+      <input id="sServer" type="url" placeholder="https://…" autocomplete="off"></label>
+    <p id="sInfo" class="hint"></p>
+    <div class="row">
+      <button id="btnCheck" type="button" class="btn ghost">Verbindung testen</button>
+      <button value="ok" class="btn primary">Speichern</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="toast" class="toast hide"></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

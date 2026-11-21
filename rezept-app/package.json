@@ -1,0 +1,16 @@
+{
+  "name": "rezept-bruecke",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Zaubertopf-Club-Rezepte einfügen und als eigenes Rezept in Cookidoo speichern (Thermomix TM6)",
+  "type": "module",
+  "main": "server.js",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.js",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@recode-software/cookidoo-api": "0.2.0"
+  }
+}
