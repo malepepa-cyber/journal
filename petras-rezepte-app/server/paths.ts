@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 export const APP_NAME = 'Petras Rezepte App';
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.3.0';
 
 export function dataDir(): string {
   const dir = process.env.PRA_DATA_DIR

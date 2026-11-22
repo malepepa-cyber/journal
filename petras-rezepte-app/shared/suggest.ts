@@ -58,7 +58,7 @@ const RULES: Rule[] = [
 ];
 
 /** Schritte, die nicht im Mixtopf passieren (Backofen, Pfanne, Kühlschrank …) */
-const NOT_TM = /\b(backofen|ofen|backen|im ofen|pfanne|grill|kühlschrank|einfrieren|servieren|anrichten|garnieren|gehen lassen|ruhen lassen|abkühlen lassen|auskühlen|form (fetten|einfetten)|ausrollen|formen|bestreuen|blech|aufschneiden|in scheiben|umfüllen|herausnehmen|entnehmen)\b/i;
+const NOT_TM = /\b(in der zwischenzeit|salzwasser|in einem (großen )?topf|im topf|auf dem herd|backofen|ofen|backen|im ofen|pfanne|grill|kühlschrank|einfrieren|servieren|anrichten|garnieren|gehen lassen|ruhen lassen|abkühlen lassen|auskühlen|form (fetten|einfetten)|ausrollen|formen|bestreuen|blech|aufschneiden|in scheiben|umfüllen|herausnehmen|entnehmen)\b/i;
 
 export function suggestForStep(text: string): TmSuggestion[] {
   if (!text || findSettings(text).length) return [];

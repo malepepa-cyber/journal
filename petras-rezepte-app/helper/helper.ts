@@ -170,9 +170,10 @@ async function transfer() {
     const steps = r.steps.filter((s) => s.text.trim()).map(stepHtml);
     const existing = document.querySelectorAll('cr-manage-list .cr-manage-list__item').length;
     const buttons = steps.reduce((n, s) => n + s.buttons, 0);
+    const marked = steps.reduce((n, s) => n + s.ingredients, 0);
     const manual = steps.flatMap((s, i) => s.manual.map((m) => `Schritt ${i + 1}: ${m}`));
     main.innerHTML = `${head}
-      <p>Die Ausfüllhilfe trägt <b>${ingr.length} Zutaten</b> und <b>${steps.length} Schritte</b> mit <b>${buttons} Thermomix-Einstellungen</b> nacheinander in dieses Formular ein – so, als würdest du tippen.</p>
+      <p>Die Ausfüllhilfe trägt <b>${ingr.length} Zutaten</b> und <b>${steps.length} Schritte</b> mit <b>${buttons} Thermomix-Einstellungen</b>${marked ? ` und <b>${marked} Zutaten zum Abwiegen</b>` : ''} nacheinander in dieses Formular ein – so, als würdest du tippen.</p>
       ${existing ? `<div class="warn">⚠ Hier stehen schon ${existing} Einträge. Die neuen werden darunter angehängt.</div>` : ''}
       <button class="btn" id="fill">✍️ Zutaten & Schritte eintragen</button>
       <div id="msg"></div>`;

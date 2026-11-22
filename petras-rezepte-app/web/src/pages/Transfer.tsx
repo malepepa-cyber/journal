@@ -264,6 +264,7 @@ export function Transfer({ id }: { id: number | null }) {
                 <TmDisplay text={s.text} />
               </div>
               {s.accessories.length > 0 && <p className="text-ink-soft">Zubehör: <b>{s.accessories.map((a) => ACCESSORIES[a]).join(', ')}</b></p>}
+              {(s.ingredients ?? []).length > 0 && <p className="text-ink-soft">Zutaten in diesem Schritt (im Cookidoo-Editor über „Zutaten“ ⚖ markieren): <b>{s.ingredients!.join(' · ')}</b></p>}
               {s.suggestions.length > 0 && <p className="flex items-center gap-2 rounded-2xl bg-apricot-100 p-3 text-sm text-apricot-700"><AlertTriangle size={16} /> Hier gibt es einen unbestätigten Vorschlag ({describeSetting(s.suggestions[0].setting).join(' · ')}). Er wird nur übertragen, wenn du ihn im Editor übernimmst.</p>}
               <div className="flex justify-between">
                 <button className="btn-ghost" disabled={k === 0} onClick={() => setK(k - 1)}><ArrowLeft size={18} /> Vorheriger Schritt</button>

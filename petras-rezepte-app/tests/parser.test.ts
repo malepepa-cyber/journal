@@ -210,3 +210,9 @@ test('Zaubertopf-Schreibweise mit „|“ (echte Sätze aus dem Club)', () => {
 test('Zubehör unter „Außerdem“ braucht keine Menge', () => {
   assert.deepEqual(checkIngredient({ ...parseIngredient('Tiefes Ofenblech'), group: 'Außerdem' }), []);
 });
+
+test('Kein Thermomix-Vorschlag für Schritte auf dem Herd', () => {
+  assert.equal(suggestForStep('In der Zwischenzeit 800 g Tortellini in kochendem Salzwasser bissfest kochen.').length, 0);
+  assert.equal(suggestForStep('Kartoffeln im Topf 20 Minuten garen.').length, 0);
+  assert.equal(suggestForStep('Alles 20 Minuten köcheln lassen.').length, 1, 'Mixtopf-Schritt weiterhin mit Vorschlag');
+});

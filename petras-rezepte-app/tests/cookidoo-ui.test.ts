@@ -24,3 +24,12 @@ test('Zutatenzeilen mit Gruppen', () => {
   r.ingredients = [parseIngredient('200 g Mehl', 'Für den Teig'), parseIngredient('1 Ei', 'Für den Teig'), parseIngredient('100 g Puderzucker', 'Für den Guss')];
   assert.deepEqual(ingredientLines(r), ['– Für den Teig –', '200 g Mehl', '1 Ei', '– Für den Guss –', '100 g Puderzucker']);
 });
+
+test('Zutaten im Schritt werden als <cr-ingredient> markiert', () => {
+  const step = { ...makeStep('125 g Parmesan, in Stücken in den Mixtopf geben und 10 Sek./Stufe 10 zerkleinern. Umfüllen.'), ingredients: ['125 g Parmesan, in Stücken'] };
+  const s = stepHtml(step);
+  assert.equal(s.html, '<cr-ingredient description="125 g Parmesan, in Stücken">125 g Parmesan, in Stücken</cr-ingredient> in den Mixtopf geben und <cr-tts speed="10" time="10">10 Sek./Stufe 10</cr-tts> zerkleinern. Umfüllen.');
+  assert.deepEqual([s.buttons, s.ingredients], [1, 1]);
+  const weg = stepHtml({ ...step, text: 'Käse zerkleinern.' });
+  assert.equal(weg.ingredients, 0, 'geänderter Text → keine Markierung');
+});

@@ -156,7 +156,7 @@ const CATEGORY_RULES: [RegExp, Category][] = [
   [/suppe(?!ngrün)|eintopf|eintöpfe|bouillon|chowder|gazpacho|minestrone/i, 'Suppen'],
   [/salat|dressing|vinaigrette/i, 'Salate'],
   [/brot|brötchen|baguette|ciabatta|focaccia|zopf|semmel|laugen|knäcke|fladen/i, 'Brot und Brötchen'],
-  [/kuchen|torte|muffin|cupcake|brownie|plätzchen|kekse|cookies|waffel|stollen|strudel|gugelhupf|tarte\b|cheesecake/i, 'Kuchen'],
+  [/kuchen|\btorten?\b|muffin|cupcake|brownie|plätzchen|kekse|cookies|waffel|stollen|strudel|gugelhupf|tarte\b|cheesecake/i, 'Kuchen'],
   [/dessert|mousse|pudding|\bcreme\b|crème|\beis\b|sorbet|tiramisu|panna cotta|kompott|grütze|parfait/i, 'Desserts'],
   [/soße|sauce|dip\b|pesto|aioli|mayonnaise|chutney|ketchup|hollandaise|gravy/i, 'Soßen'],
   [/smoothie|getränk|saft|limonade|likör|shake|tee\b|kakao|punsch|sirup|eistee|bowle/i, 'Getränke'],

@@ -45,6 +45,14 @@ Die App öffnet sich als eigenes Fenster in **Google Chrome** (falls Chrome fehl
 * **Gespeicherte Seite:** Rezeptseite angemeldet mit **Strg + S** speichern und die .html-Datei in die App ziehen.
 * Die App speichert **kein** Club-Passwort.
 
+### Schritte aus dem Kochmodus (neu in 1.3)
+Hat ein Club-Rezept einen **Kochmodus**, baut die App die Schritte daraus – in der Reihenfolge, in der man am Thermomix
+arbeitet, mit genau **einer Einstellung pro Schritt** und den **Zutaten des Schritts**, z. B.
+„125 g Parmesan, in Stücken in den Mixtopf geben und 10 Sek./Stufe 10 zerkleinern. Umfüllen.“
+* Die Zutaten werden in Cookidoo als **Zutat im Schritt** markiert (`<cr-ingredient>`) – der TM6 zeigt sie im Schritt mit Menge an.
+* Der **Originaltext** der Seite bleibt erhalten: im Editor mit „⇄ Originaltext verwenden“ umschalten.
+* Wohin eine Zutat kommt (Mixtopf/Varoma/Gareinsatz), entnimmt die App dem Originaltext; ist es unklar, heißt es neutral „zugeben“.
+
 ### Ausfüllhilfe für den Cookidoo-Editor (neu in 1.2)
 Das Lesezeichen **„➜ Petras Rezepte“** füllt den Cookidoo-Editor über dessen normale Oberfläche aus:
 1. In der App: „Cookidoo übertragen“ → **„Ausfüllhilfe starten“** (Cookidoo öffnet sich bei „Meine Kreationen“).

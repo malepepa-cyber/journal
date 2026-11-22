@@ -80,6 +80,9 @@ export interface Step {
   /** Ruhe-/Geh-/Kühlzeit in Minuten, falls der Schritt eine Wartezeit ist */
   restMinutes: number | null;
   suggestions: TmSuggestion[];
+  /** Zutaten, die in diesem Schritt zugegeben werden (exakter Text, z. B. „125 g Parmesan, in Stücken“).
+   *  Werden in Cookidoo als Zutat im Schritt markiert (Anzeige mit Menge am TM6). */
+  ingredients?: string[];
 }
 
 export type SourceType = 'text' | 'pdf' | 'ocr' | 'docx' | 'txt' | 'web' | 'manual' | 'sample';
@@ -107,6 +110,8 @@ export interface Recipe {
   favorite: boolean;
   source: { type: SourceType; name: string; url?: string };
   cookidoo: { status: CookidooStatus; at?: string | null; url?: string | null };
+  /** Alternative Schrittfassung (z. B. Originaltext der Seite, wenn die Schritte aus dem Kochmodus stammen) */
+  altSteps?: { label: string; steps: Step[] } | null;
   createdAt?: string;
   updatedAt?: string;
 }

@@ -93,6 +93,27 @@ Zubereitung
       assert.match(await h.locator('main').textContent(), /Schritt 4: 2 Sek\. \| Turbo/);
       await ck.screenshot({ path: join(tmp, 'ausfuellhilfe.png') });
     });
+    await check('Club-Rezept (Kochmodus) → Schritte mit markierten Zutaten <cr-ingredient>', async () => {
+      await app.bringToFront();
+      await app.goto(`${B}/#/importieren`);
+      await app.setInputFiles('input[type=file]', join(__dirname, '..', 'fixtures', 'zaubertopf-aufbau.html'));
+      await app.waitForSelector('text=Neues Rezept prüfen');
+      assert.ok(await app.locator('text=⚖ 1 Zwiebel, halbiert').count(), 'Zutat am Schritt angezeigt');
+      assert.ok(await app.locator('button:has-text("Originaltext verwenden")').count(), 'Umschalter vorhanden');
+      await app.click('button:has-text("Speichern & zu Cookidoo")'); await app.waitForSelector('text=nach Cookidoo übertragen');
+      const pop = ctx.waitForEvent('page');
+      await app.click('button:has-text("Ausfüllhilfe starten")');
+      const ck2 = await pop; await ck2.waitForLoadState();
+      await ck2.goto('https://cookidoo.de/created-recipes/de-DE/01ZWEITES/edit/ingredients-and-preparation-steps?active=ingredients');
+      await ck2.evaluate(js);
+      const h = ck2.locator('#petras-rezepte-helfer');
+      assert.match(await h.locator('main').textContent(), /4 Zutaten zum Abwiegen/);
+      await h.locator('#fill').click();
+      await h.locator('text=Fertig eingetragen').waitFor({ timeout: 20000 });
+      const steps = (await ck2.evaluate(() => window.__saved)).filter((x) => x.kind === 'steps').map((x) => x.html);
+      assert.equal(steps[0], '<cr-ingredient description="1 Zwiebel, halbiert">1 Zwiebel, halbiert</cr-ingredient> in den Mixtopf geben und <cr-tts speed="5" time="5">5 Sek./Stufe 5</cr-tts> zerkleinern. Mit dem Spatel nach unten schieben.');
+      assert.match(steps[2], /<cr-ingredient description="200 g rote Linsen">.*<cr-ingredient description="400 g Kokosmilch">/);
+    });
     await check('Keine Fehler', async () => assert.deepEqual(errs, []));
     console.log(`   Bildschirmfoto: ${tmp}/ausfuellhilfe.png`);
   } finally { await browser.close(); server.kill(); }

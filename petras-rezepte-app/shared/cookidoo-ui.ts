@@ -32,21 +32,32 @@ export function ttsElement(op: TmMatch): string {
   return `<cr-tts ${attrs.join(' ')}>${esc(op.match.trim())}</cr-tts>`;
 }
 
-export interface StepHtml { html: string; text: string; buttons: number; manual: string[] }
+export interface StepHtml { html: string; text: string; buttons: number; ingredients: number; manual: string[] }
 
-/** Schritttext → HTML für das Cookidoo-Schrittfeld (Text escaped, Einstellungen als <cr-tts>). */
+/**
+ * Schritttext → HTML für das Cookidoo-Schrittfeld:
+ * Text escaped, Einstellungen als <cr-tts>, Zutaten des Schritts als <cr-ingredient description="…">
+ * (wie im Editor: „<cr-ingredient description="500ml Wasser">500ml Wasser</cr-ingredient>“).
+ */
 export function stepHtml(step: Step): StepHtml {
   const text = stepText(step);
-  let html = '', last = 0, buttons = 0;
+  type Part = { start: number; end: number; html: string; kind: 'tts' | 'ingr' | 'text' };
+  const parts: Part[] = [];
   const manual: string[] = [];
   for (const op of findSettings(text)) {
-    html += esc(text.slice(last, op.offset));
-    if (ttsSupported(op)) { html += ttsElement(op); buttons++; }
-    else { html += esc(op.match); manual.push(op.match.trim()); }
-    last = op.offset + op.length;
+    if (ttsSupported(op)) parts.push({ start: op.offset, end: op.offset + op.length, html: ttsElement(op), kind: 'tts' });
+    else manual.push(op.match.trim());
   }
+  for (const ing of step.ingredients ?? []) {
+    const at = text.indexOf(ing);
+    if (at < 0 || parts.some((p) => at < p.end && at + ing.length > p.start)) continue;
+    parts.push({ start: at, end: at + ing.length, html: `<cr-ingredient description="${esc(ing)}">${esc(ing)}</cr-ingredient>`, kind: 'ingr' });
+  }
+  parts.sort((a, b) => a.start - b.start);
+  let html = '', last = 0;
+  for (const p of parts) { html += esc(text.slice(last, p.start)) + p.html; last = p.end; }
   html += esc(text.slice(last));
-  return { html, text, buttons, manual };
+  return { html, text, buttons: parts.filter((p) => p.kind === 'tts').length, ingredients: parts.filter((p) => p.kind === 'ingr').length, manual };
 }
 
 /** Zutatenzeilen für Cookidoo (Gruppen als eigene Zeile „– Für die Soße –“). */

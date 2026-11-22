@@ -235,6 +235,12 @@ export function Editor({ id }: { id: number | null }) {
                 {suggestionCount ? ` · ${suggestionCount} Thermomix-Vorschl${suggestionCount > 1 ? 'äge' : 'ag'} zum Bestätigen` : ''}
               </p>
             </div>
+            {r.altSteps && (
+              <button className="btn-ghost btn-sm" title="Zwischen den beiden Schritt-Fassungen wechseln" onClick={() => update((o) => ({
+                ...o, steps: o.altSteps!.steps,
+                altSteps: { label: /Original/.test(o.altSteps!.label) ? 'Schritte aus dem Kochmodus' : 'Originaltext der Seite', steps: o.steps },
+              }))}>⇄ {/Original/.test(r.altSteps.label) ? 'Originaltext verwenden' : 'Kochmodus-Schritte verwenden'}</button>
+            )}
             {(issues.length > 0 || notes.length > 0) && <button className="btn-soft btn-sm" onClick={() => setShowIssues(!showIssues)}>{showIssues ? 'Ausblenden' : 'Anzeigen'}</button>}
           </div>
           {showIssues && (
@@ -381,6 +387,10 @@ export function Editor({ id }: { id: number | null }) {
                     <button className="rounded-xl border border-dashed border-cream-300 px-3 py-1.5 text-sm font-medium text-ink-soft hover:border-sage-500 hover:text-sage-700"
                       onClick={() => setEdit({ step: i, match: null, initial: null })}><Plus size={14} className="-mt-0.5 inline" /> Einstellung</button>
                     {s.restMinutes ? <span className="chip bg-apricot-100 text-apricot-700"><Hourglass size={14} /> {fmtMin(s.restMinutes)} warten</span> : null}
+                    {(s.ingredients ?? []).map((ing) => (
+                      <span key={ing} title={s.text.includes(ing) ? 'Wird in Cookidoo als Zutat dieses Schritts markiert (Anzeige mit Menge am TM6)' : 'Steht nicht mehr wörtlich im Text – wird nicht markiert'}
+                        className={`chip ${s.text.includes(ing) ? 'bg-sage-50 text-sage-700' : 'bg-cream-200 text-ink-faint line-through'}`}>⚖ {ing}</span>
+                    ))}
                     {s.accessories.map((a) => (
                       <button key={a} className="chip bg-cream-200 text-ink hover:bg-red-50 hover:text-red-700" title="Entfernen"
                         onClick={() => setStep(i, { ...s, accessories: s.accessories.filter((x) => x !== a) })}>{ACCESSORIES[a]} <X size={12} /></button>
