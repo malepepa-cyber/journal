@@ -51,7 +51,8 @@ export function openApp(url: string): void {
       log('info', `App geöffnet mit ${browser.includes('chrome') ? 'Chrome' : 'Edge'}`);
       return;
     }
-    if (process.platform === 'win32') spawn('cmd', ['/c', 'start', '""', url], { ...detached, windowsHide: true }).unref();
+    // cmd braucht für „start“ einen (leeren) Fenstertitel; Argumente wörtlich übergeben
+    if (process.platform === 'win32') spawn('cmd.exe', ['/d', '/s', '/c', `start "" "${url}"`], { ...detached, windowsHide: true, windowsVerbatimArguments: true }).unref();
     else if (process.platform === 'darwin') spawn('open', [url], detached).unref();
     else spawn('xdg-open', [url], detached).unref();
   } catch (e) {

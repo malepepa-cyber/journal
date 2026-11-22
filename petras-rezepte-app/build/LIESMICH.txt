@@ -1,0 +1,41 @@
+PETRAS REZEPTE APP – KURZANLEITUNG
+==================================
+
+STARTEN
+  Doppelklick auf „Petras Rezepte App“ auf dem Desktop. Die App öffnet sich als eigenes
+  Fenster in Google Chrome (falls Chrome fehlt: Microsoft Edge).
+
+REZEPT ÜBERNEHMEN
+  1. „Rezept importieren“ wählen.
+  2. Text aus dem Zaubertopf Club einfügen – ODER – die PDF hineinziehen
+     (PDF erzeugen: im Browser Strg + P → „Als PDF speichern“).
+  3. Rezept prüfen. Grüne Knöpfe = Thermomix-Einstellungen aus dem Rezept.
+     Gestrichelte Knöpfe = Vorschläge der App – erst nach „Übernehmen“ gültig.
+  4. „Speichern & zu Cookidoo“ klicken und dem Assistenten folgen.
+  5. In Cookidoo speichern – das Rezept erscheint am TM6 unter
+     Meine Rezepte → Meine Kreationen.
+
+TIPP: LESEZEICHEN
+  Einstellungen → Cookidoo → Knopf „➜ Petras Rezepte“ in die Lesezeichenleiste ziehen.
+  Dann auf einer Rezeptseite anklicken → in der App „Aus Zwischenablage einfügen“.
+
+DATEN & SICHERUNG
+  Alle Rezepte liegen nur auf diesem PC:  %APPDATA%\Petras Rezepte App
+  Automatische tägliche Sicherung; manuell unter Einstellungen → Datensicherung.
+  Export aller Rezepte als Datei: Einstellungen → „Alle Rezepte exportieren“.
+
+UPDATE
+  Neue Setup-Datei einfach starten – Rezepte und Einstellungen bleiben erhalten.
+
+DEINSTALLIEREN
+  Windows-Einstellungen → Apps → „Petras Rezepte App“ → Deinstallieren.
+  Die Rezepte bleiben erhalten, außer du wählst ausdrücklich „Löschen“.
+
+HINWEIS BEIM ERSTEN START
+  Windows zeigt evtl. „Der Computer wurde durch Windows geschützt“ (SmartScreen), weil die
+  Datei nicht digital signiert ist: „Weitere Informationen“ → „Trotzdem ausführen“.
+
+PROBLEME?
+  Fehlerprotokoll (ohne Rezeptinhalte): %APPDATA%\Petras Rezepte App\logs\app.log
+
+© Patrick S. – Thermomix® und Cookidoo® sind Marken der Vorwerk-Gruppe.

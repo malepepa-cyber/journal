@@ -1,4 +1,4 @@
-import { Component, type ReactNode } from 'react';
+import { Component, useEffect, type ReactNode } from 'react';
 import { Home, FileDown, BookOpen, Heart, Send, Settings as Cog, ChefHat } from 'lucide-react';
 import { useRoute, go } from './lib/router.ts';
 import { useSession } from './lib/session.tsx';
@@ -39,6 +39,7 @@ export function App() {
   const route = useRoute();
   const { session, error } = useSession();
   const top = route[0] ?? '';
+  useEffect(() => { window.scrollTo(0, 0); }, [route.join('/')]);
   const active = top === 'rezept' || top === 'neu' ? 'rezepte' : top;
 
   let page: ReactNode;

@@ -31,7 +31,7 @@ const SCAN = `<body style="font:22px Georgia,serif;padding:40px;background:#fbfa
 <h2>Zubereitung</h2><p>1. Zwiebel in den Mixtopf geben, 5 Sek./Stufe 5 zerkleinern.<br>2. Butter zugeben, 3 Min./120°C/Stufe 1 dünsten.<br>3. Kürbis und Wasser zugeben, 20 Min./100°C/Stufe 1 garen.<br>4. Kokosmilch zugeben, 1 Min./Stufe 8 pürieren.</p></body>`;
 
 (async () => {
-  const server = spawn(process.execPath, ['dist/server.cjs', '--no-browser'], { env: { ...process.env, PRA_DATA_DIR: tmp, PRA_PORT: String(PORT), PRA_TOKEN: TOKEN }, stdio: 'ignore' });
+  const server = spawn(process.env.PRA_E2E_BIN || process.execPath, process.env.PRA_E2E_BIN ? ['--no-browser'] : ['dist/server.cjs', '--no-browser'], { env: { ...process.env, PRA_DATA_DIR: tmp, PRA_PORT: String(PORT), PRA_TOKEN: TOKEN }, stdio: 'ignore' });
   for (let i = 0; i < 50; i++) { try { if ((await fetch(`${B}/api/health`)).ok) break; } catch {} await new Promise((r) => setTimeout(r, 100)); }
   const browser = await chromium.launch();
   try {

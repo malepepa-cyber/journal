@@ -1,0 +1,25 @@
+Petras Rezepte App
+Copyright (c) 2026 Patrick S. Alle Rechte vorbehalten.
+
+NUTZUNGSBEDINGUNGEN
+
+1. Die Software darf für private, nicht-kommerzielle Zwecke kostenlos installiert und genutzt werden.
+2. Weitergabe, Veränderung oder kommerzielle Nutzung nur mit Zustimmung des Rechteinhabers.
+3. Die Software wird ohne Gewähr bereitgestellt („wie besehen“). Der Rechteinhaber haftet nicht für
+   Schäden oder Datenverluste, soweit gesetzlich zulässig. Bitte erstelle regelmäßig Sicherungen
+   (Einstellungen → Datensicherung).
+4. Rezepte und Bilder Dritter (z. B. aus dem Zaubertopf Club) unterliegen deren Urheberrecht. Die App
+   verarbeitet solche Inhalte ausschließlich lokal für den privaten Gebrauch der Nutzerin bzw. des
+   Nutzers und veröffentlicht nichts. Die Nutzerin bzw. der Nutzer ist dafür verantwortlich, nur Inhalte
+   zu verarbeiten, zu denen sie bzw. er berechtigt ist.
+5. Cookidoo: Vorwerk bietet keine offizielle Schnittstelle an. Der Übertragungsassistent nutzt nur die
+   normale Cookidoo-Webseite. Die optionale „Schnellübertragung (experimentell)“ ist standardmäßig
+   ausgeschaltet; ihre Nutzung erfolgt auf eigene Verantwortung und im Rahmen der Cookidoo-
+   Nutzungsbedingungen.
+6. Optionale KI-Funktion: Bei Nutzung wird ausschließlich der jeweilige Rezepttext an die Claude-API von
+   Anthropic gesendet (eigener API-Schlüssel, eigene Kosten, es gelten die Bedingungen von Anthropic).
+
+Thermomix® und Cookidoo® sind eingetragene Marken der Vorwerk-Gruppe. Diese Software steht in keiner
+Verbindung zu Vorwerk und wird von Vorwerk weder unterstützt noch geprüft.
+
+Enthaltene Open-Source-Komponenten und ihre Lizenzen: siehe LIZENZEN.txt.

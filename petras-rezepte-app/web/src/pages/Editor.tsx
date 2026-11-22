@@ -289,9 +289,9 @@ export function Editor({ id }: { id: number | null }) {
         </div>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(360px,5fr)_7fr]">
+      <div className="grid gap-6 2xl:grid-cols-[minmax(440px,5fr)_7fr]">
         {/* Zutaten */}
-        <section className="card self-start p-6">
+        <section className="card self-start p-6 2xl:sticky 2xl:top-6">
           <div className="mb-4 flex items-center justify-between gap-2">
             <h2 className="text-2xl font-bold">Zutaten <span className="chip ml-1 bg-cream-200 text-sm text-ink-soft">{r.ingredients.filter((i) => i.name).length}</span></h2>
             <button className="btn-ghost btn-sm" onClick={() => setIngText(ingText == null ? r.ingredients.map((i) => (i.group ? `${i.group}: ` : '') + formatIngredient(i)).join('\n') : null)}>
@@ -338,7 +338,7 @@ export function Editor({ id }: { id: number | null }) {
                           {ing.note && <p className="mt-0.5 px-1 text-sm text-ink-soft group-focus-within:hidden">{ing.note}</p>}
                           {w.length > 0 && <p className="mt-0.5 flex items-center gap-1 px-1 text-xs text-apricot-700"><AlertTriangle size={12} />{w.join(' · ')}</p>}
                         </div>
-                        <div className="flex flex-col opacity-40 transition group-hover:opacity-100 group-focus-within:opacity-100">
+                        <div className="flex items-center pt-1 opacity-40 transition group-hover:opacity-100 group-focus-within:opacity-100">
                           <button className="rounded-lg p-1 hover:bg-cream-300" onClick={() => set('ingredients', move(r.ingredients, i, -1))} aria-label="nach oben"><ChevronUp size={16} /></button>
                           <button className="rounded-lg p-1 hover:bg-red-50 hover:text-red-700" onClick={() => set('ingredients', r.ingredients.filter((_, j) => j !== i))} aria-label="Zutat löschen"><X size={16} /></button>
                           <button className="rounded-lg p-1 hover:bg-cream-300" onClick={() => set('ingredients', move(r.ingredients, i, 1))} aria-label="nach unten"><ChevronDown size={16} /></button>
