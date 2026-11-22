@@ -153,16 +153,16 @@ export function makeStep(text: string): Step {
 }
 
 const CATEGORY_RULES: [RegExp, Category][] = [
-  [/suppe|eintopf|brühe|bouillon|chowder|gazpacho|minestrone/i, 'Suppen'],
+  [/suppe(?!ngrün)|eintopf|eintöpfe|bouillon|chowder|gazpacho|minestrone/i, 'Suppen'],
   [/salat|dressing|vinaigrette/i, 'Salate'],
   [/brot|brötchen|baguette|ciabatta|focaccia|zopf|semmel|laugen|knäcke|fladen/i, 'Brot und Brötchen'],
   [/kuchen|torte|muffin|cupcake|brownie|plätzchen|kekse|cookies|waffel|stollen|strudel|gugelhupf|tarte\b|cheesecake/i, 'Kuchen'],
-  [/dessert|mousse|pudding|creme|crème|eis\b|sorbet|tiramisu|panna cotta|kompott|grütze|parfait/i, 'Desserts'],
+  [/dessert|mousse|pudding|\bcreme\b|crème|\beis\b|sorbet|tiramisu|panna cotta|kompott|grütze|parfait/i, 'Desserts'],
   [/soße|sauce|dip\b|pesto|aioli|mayonnaise|chutney|ketchup|hollandaise|gravy/i, 'Soßen'],
   [/smoothie|getränk|saft|limonade|likör|shake|tee\b|kakao|punsch|sirup|eistee|bowle/i, 'Getränke'],
   [/frühstück|müsli|porridge|marmelade|konfitüre|aufstrich|granola|overnight|nutella|brotaufstrich|rührei/i, 'Frühstück'],
   [/beilage|püree|reis\b|risotto|kartoffel|polenta|spätzle|knödel|gemüsebeilage|couscous|bulgur/i, 'Beilagen'],
-  [/gulasch|braten|hähnchen|huhn|rind|schwein|fleisch|hack|lasagne|nudel|pasta|spaghetti|auflauf|curry|chili|geschnetzeltes|fisch|lachs|pizza|quiche|burger|bolognese|frikadelle|schnitzel|wrap|tacos/i, 'Hauptgerichte'],
+  [/mit fleisch|mit geflügel|mit fisch|roulade|gyros|gulasch|braten|hähnchen|huhn|rind|schwein|fleisch|hack|lasagne|nudel|pasta|spaghetti|auflauf|curry|chili|geschnetzeltes|fisch|lachs|pizza|quiche|burger|bolognese|frikadelle|schnitzel|wrap|tacos/i, 'Hauptgerichte'],
 ];
 
 export function guessCategory(title: string, rest = ''): Category {

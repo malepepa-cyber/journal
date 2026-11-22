@@ -192,3 +192,21 @@ test('Kopfzeile mit Sonderzeichen-Doppelpunkt aus PDF-Schrift', () => {
   const r = parseRecipeText('Eintopf\nZutaten\n1 Zwiebel\nZubereitung\n1. Schneiden.\n22.11.26, 1015 Eintopf | Zaubertopf Club\n2. Kochen.');
   assert.equal(r.steps.length, 2);
 });
+
+test('Zaubertopf-Schreibweise mit „|“ (echte Sätze aus dem Club)', () => {
+  const s = (t: string) => findSettings(t).map((o) => [o.mode, o.time ?? null, o.temp ?? null, o.speed ?? null, !!o.reverse]);
+  assert.deepEqual(s('Knoblauch in den Mixtopf geben und 2 Sek. | Turbo zerkleinern.'), [['turbo', 2, null, null, false]]);
+  assert.deepEqual(s('Für 10 Sek. | Stufe 4 vermengen.'), [['manual', 10, null, '4', false]]);
+  assert.deepEqual(s('Öl und Tomatenmark zugeben und 4 Min. | 120 °C | Stufe 1 andünsten.'), [['manual', 240, 120, '1', false]]);
+  assert.deepEqual(s('den Varoma® verschlossen aufsetzen und 10 Min. | Varoma® | Stufe 2 garen. Den Brokkoli verteilen und 5 Min. | Varoma® | Stufe 2 garen.'),
+    [['manual', 600, 'Varoma', '2', false], ['manual', 300, 'Varoma', '2', false]]);
+  assert.deepEqual(s('die Soße aufsteigend 30 Sek. | Stufe 6-9 pürieren.'), [['manual', 30, null, '6', false]]);
+  const pk = findSettings('Nach Packungsangabe der Nudeln | Varoma® | Linkslauf | Sanftrührstufe garen.');
+  assert.deepEqual(s('Nach Packungsangabe der Nudeln | Varoma® | Linkslauf | Sanftrührstufe garen.'), [['manual', null, 'Varoma', 'soft', true]]);
+  assert.ok(pk[0].warnings.includes('Keine Zeit angegeben'), 'fehlende Zeit wird gemeldet');
+  assert.equal(findSettings('Arbeitszeit 10 Min. | Gesamtzeit 30 Min.').length, 0);
+});
+
+test('Zubehör unter „Außerdem“ braucht keine Menge', () => {
+  assert.deepEqual(checkIngredient({ ...parseIngredient('Tiefes Ofenblech'), group: 'Außerdem' }), []);
+});

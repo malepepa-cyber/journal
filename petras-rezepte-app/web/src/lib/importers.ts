@@ -68,11 +68,12 @@ export async function docxToText(buf: ArrayBuffer): Promise<string> {
   return String(r.value ?? '');
 }
 
-export type ImportKind = 'pdf' | 'docx' | 'txt' | 'image';
+export type ImportKind = 'pdf' | 'docx' | 'txt' | 'image' | 'html';
 export function kindOf(file: File): ImportKind | null {
   const n = file.name.toLowerCase();
   if (file.type === 'application/pdf' || n.endsWith('.pdf')) return 'pdf';
   if (n.endsWith('.docx')) return 'docx';
+  if (file.type === 'text/html' || /\.html?$/.test(n) || n.endsWith('.mhtml')) return 'html';
   if (file.type.startsWith('text/') || n.endsWith('.txt')) return 'txt';
   if (/^image\/(jpeg|png|webp|bmp)$/.test(file.type) || /\.(jpe?g|png|webp|bmp)$/.test(n)) return 'image';
   return null;
@@ -80,13 +81,34 @@ export function kindOf(file: File): ImportKind | null {
 
 export async function fileToText(file: File, progress?: Progress): Promise<{ text: string; kind: ImportKind; ocr: boolean }> {
   const kind = kindOf(file);
-  if (!kind) throw new Error('Dieses Dateiformat wird nicht unterstützt. Möglich sind PDF, Word (.docx), TXT und Fotos (JPG/PNG).');
+  if (!kind) throw new Error('Dieses Dateiformat wird nicht unterstützt. Möglich sind PDF, gespeicherte Webseiten (.html), Word (.docx), TXT und Fotos (JPG/PNG).');
   if (file.size > 50 * 1024 * 1024) throw new Error('Die Datei ist zu groß (max. 50 MB).');
   if (kind === 'pdf') { const r = await pdfToText(await file.arrayBuffer(), progress); return { text: r.text, kind, ocr: r.ocr }; }
   if (kind === 'docx') { progress?.({ label: 'Word-Datei wird gelesen …', value: 0.5 }); return { text: await docxToText(await file.arrayBuffer()), kind, ocr: false }; }
+  if (kind === 'html') {
+    const raw = await file.text();
+    return { text: /\.mhtml$/i.test(file.name) || /^MIME-Version:/im.test(raw.slice(0, 500)) ? mhtmlToHtml(raw) : raw, kind, ocr: false };
+  }
   if (kind === 'txt') return { text: await file.text(), kind, ocr: false };
   progress?.({ label: 'Texterkennung (OCR) wird vorbereitet …', value: 0.05 });
   return { text: await ocrCanvas(file, progress), kind, ocr: true };
+}
+
+/** „Webseite, Einzeldatei“ (.mhtml) → HTML des Hauptdokuments (quoted-printable dekodieren). */
+export function mhtmlToHtml(raw: string): string {
+  const boundary = raw.match(/boundary="?([^";\r\n]+)"?/i)?.[1];
+  const parts = boundary ? raw.split(`--${boundary}`) : [raw];
+  const part = parts.find((p) => /Content-Type:\s*text\/html/i.test(p)) ?? raw;
+  const split = part.search(/\r?\n\r?\n/);
+  const head = part.slice(0, split), body = part.slice(split).trim();
+  if (!/quoted-printable/i.test(head)) return body;
+  const bytes: number[] = [];
+  const qp = body.replace(/=\r?\n/g, '');
+  for (let i = 0; i < qp.length; i++) {
+    if (qp[i] === '=' && /^[0-9A-F]{2}$/i.test(qp.slice(i + 1, i + 3))) { bytes.push(parseInt(qp.slice(i + 1, i + 3), 16)); i += 2; }
+    else bytes.push(...new TextEncoder().encode(qp[i]));
+  }
+  return new TextDecoder('utf-8').decode(new Uint8Array(bytes));
 }
 
 /** Foto verkleinern (max. 1400 px, JPEG) – spart Speicher in der Datenbank. */

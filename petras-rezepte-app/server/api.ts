@@ -7,6 +7,7 @@ import { structureWithAi } from './ai.ts';
 import { log } from './log.ts';
 import { APP_VERSION, dataDir } from './paths.ts';
 import { bookmarkletSource } from './bookmarklet.ts';
+import { fetchRecipePage, FetchError } from './fetch-url.ts';
 import type { Recipe } from '../shared/model.ts';
 
 export class HttpError extends Error { constructor(public status: number, message: string) { super(message); } }
@@ -147,6 +148,12 @@ route('POST', '/api/ai/structure', async ({ profileId, body }) => {
 route('GET', '/api/backups', () => listBackups());
 route('POST', '/api/backups', () => createBackup('manuell'));
 route('POST', '/api/backups/restore', async ({ body }) => { restoreBackup(String((await body()).name ?? '')); return { ok: true }; });
+
+// ---------- Rezeptseite per Link abrufen (nur öffentliche Seiten) ----------
+route('POST', '/api/fetch-url', async ({ body }) => {
+  try { return await fetchRecipePage(String((await body()).url ?? '')); }
+  catch (e) { if (e instanceof FetchError) throw new HttpError(e.status, e.message); throw e; }
+});
 
 // ---------- Cookidoo-Helfer (Lesezeichen) ----------
 route('GET', '/api/bookmarklet', () => ({ code: bookmarkletSource() }));

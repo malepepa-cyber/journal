@@ -40,6 +40,8 @@ const UNIT_MAP: Record<string, string> = {
   messbecher: 'Messbecher',
 };
 export const KNOWN_UNITS = [...new Set(Object.values(UNIT_MAP))];
+/** „Gramm“ → „g“, „Essl.“ → „EL“ … (unbekannte Einheiten bleiben unverändert) */
+export const normalizeUnit = (u: string): string => { const t = u.trim(); return UNIT_MAP[t.toLowerCase()] ?? t; };
 
 const FRACTIONS: Record<string, number> = { '½': 0.5, '¼': 0.25, '¾': 0.75, '⅓': 1 / 3, '⅔': 2 / 3, '⅛': 0.125 };
 const NUM_RE = String.raw`(?:\d+\s+\d+\s*\/\s*\d+|\d+\s*\/\s*\d+|\d+(?:[,.]\d+)?(?:\s*[½¼¾⅓⅔⅛])?|[½¼¾⅓⅔⅛])`;
@@ -110,7 +112,9 @@ export function checkIngredient(i: Ingredient): string[] {
   const w: string[] = [];
   if (!i.name.trim()) w.push('Zutat ohne Namen');
   const full = `${i.name} ${i.note}`;
-  if (i.amount == null && !NO_AMOUNT_OK.test(full)) w.push('Menge fehlt');
+  // Unter „Außerdem“/„Zubehör“ stehen Geräte (z. B. „Tiefes Ofenblech“) – die brauchen keine Menge
+  const equipment = /^(außerdem|zubehör|utensilien|du brauchst|ausstattung)/i.test(i.group ?? '');
+  if (i.amount == null && !equipment && !NO_AMOUNT_OK.test(full)) w.push('Menge fehlt');
   if (i.amount != null && i.amount <= 0) w.push('Menge muss größer als 0 sein');
   if (i.amountMax != null && i.amount != null && i.amountMax < i.amount) w.push('Bereich verkehrt herum');
   if (i.unit && !KNOWN_UNITS.includes(i.unit)) w.push(`Unbekannte Einheit „${i.unit}“`);

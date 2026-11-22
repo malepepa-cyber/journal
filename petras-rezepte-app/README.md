@@ -34,6 +34,17 @@ Die App öffnet sich als eigenes Fenster in **Google Chrome** (falls Chrome fehl
 ![Editor](docs/bilder/4-editor.png)
 ![Cookidoo-Assistent](docs/bilder/5-cookidoo-assistent.png)
 
+### Rezept per Link (neu in 1.1)
+„Rezept importieren“ → **Link einfügen** → „Rezept holen“.
+* **Öffentliche Rezeptseiten** liest die App direkt.
+* **ZauberTopf Club:** Die Zubereitung ist nur für angemeldete Mitglieder sichtbar. Die App öffnet die Seite deshalb in
+  deinem angemeldeten Chrome → dort auf das Lesezeichen **„➜ Petras Rezepte“** → „Für die App kopieren“ → zurück zur App,
+  sie übernimmt das Rezept **automatisch**. Gelesen werden Zutaten mit Gruppen, alle Schritte, die Club-Schreibweise
+  („10 Sek. | Stufe 4“) und zum Abgleich der **Kochmodus**. Verlinkte **Teilrezepte** (z. B. selbst gemachter Frischkäse)
+  können per Häkchen gleich mitgeholt werden.
+* **Gespeicherte Seite:** Rezeptseite angemeldet mit **Strg + S** speichern und die .html-Datei in die App ziehen.
+* Die App speichert **kein** Club-Passwort.
+
 ### Noch schneller: Lesezeichen „➜ Petras Rezepte“
 Einstellungen → Cookidoo → den grünen Knopf in die Lesezeichenleiste ziehen (Leiste einblenden: **Strg + Umschalt + B**).
 Auf einer Rezeptseite anklicken → in der App **„Aus Zwischenablage einfügen“**.
@@ -88,7 +99,7 @@ Warum diese Lösung (statt Electron/Tauri/PWA): siehe [docs/MACHBARKEIT.md](docs
 ### Ordner
 | Ordner | Inhalt |
 |---|---|
-| `shared/` | Datenmodell, Parser, TM-Einstellungen (`tm.ts`), Zutaten, Vorschläge, Validierung, Cookidoo-Format, PDF-Zeilen |
+| `shared/` | Datenmodell, Parser, TM-Einstellungen (`tm.ts`), Zutaten, Vorschläge, Validierung, Cookidoo-Format, PDF-Zeilen, Seitenleser (`sites/`: ZauberTopf Club, allgemein) |
 | `server/` | lokaler Dienst: `main.ts`, `api.ts`, `db.ts`, `backup.ts`, `security.ts`, `secrets.ts`, `ai.ts`, `launcher.ts` |
 | `web/` | Oberfläche (Vite, React 19, Tailwind 4) – Seiten in `web/src/pages` |
 | `helper/` | Lesezeichen (wird zu `web/dist/helper/bookmarklet.js` gebaut) |
@@ -102,7 +113,8 @@ npm install
 npm run build          # Oberfläche + Lesezeichen + Dienst → dist/
 npm start              # Dienst starten (öffnet Chrome); --no-browser zum Testen
 npm run dev            # Entwicklung: Dienst (Port 47123) + Vite (Port 5173)
-npm test               # 28 Unit-/Integrationstests
+npm test               # 36 Unit-/Integrationstests
+node tests/e2e/link-import.cjs  # E2E: Link einfügen, Lesezeichen, gespeicherte Seiten
 npm run test:e2e       # Browser-Ende-zu-Ende-Test (Playwright, benötigt Chromium)
 npm run typecheck
 npm run dist:win       # Windows-EXE + Installer → release/  (benötigt makensis, unzip)
@@ -122,7 +134,8 @@ Umgebungsvariablen für Tests: `PRA_DATA_DIR`, `PRA_PORT`, `PRA_TOKEN`, `PRA_NO_
   Sicherung/Wiederherstellung, Verschlüsselung, Protokoll).
 * ✅ E2E im Browser – auch gegen die **gepackte** Single-Executable: mehrseitige PDF mit Kopf-/Fußzeilen, PDF mit Tabelle
   und Bild, **gescannte PDF (OCR)**, Text-Import → Vorschlag → Speichern → Bibliothek → Favorit → Assistent.
-* ✅ Lesezeichen gegen nachgebaute Zaubertopf-/Cookidoo-Seiten.
+* ✅ Lesezeichen gegen nachgebaute Zaubertopf-/Cookidoo-Seiten; ZauberTopf-Leser mit drei echten, angemeldet gespeicherten
+  Club-Seiten (liegen nur lokal in `tests/fixtures/privat/`, werden wegen Urheberrecht nie committet).
 * ⚠️ **Noch nicht auf echtem Windows getestet** (Build entsteht unter Linux; Struktur der EXE und Inhalt des Installers
   sind geprüft). Ebenfalls ungetestet: echtes cookidoo.de, echte Zaubertopf-Seiten, KI mit echtem Schlüssel.
 

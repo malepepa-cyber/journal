@@ -8,7 +8,7 @@ import type { TmMatch, TmSetting } from './model.ts';
 const NUM = String.raw`\d+(?:[,.]\d+)?`;
 const DUR_UNIT = String.raw`(?:Std\.?|Stunden?|Min\.?|Minuten?|Sek\.?|Sekunden?|sec\.?|s(?![a-zäöüß]))`;
 const T_DUR = String.raw`${NUM}(?:\s*[-–]\s*${NUM})?\s*${DUR_UNIT}(?:\s*${NUM}\s*${DUR_UNIT})?`;
-const T_TEMP = String.raw`(?:${NUM}\s*°\s*C?|Varoma)`;
+const T_TEMP = String.raw`(?:${NUM}\s*°\s*C?|Varoma(?:®|\(R\))?)`;
 const T_DIR = String.raw`(?:Linkslauf|Rückwärts(?:lauf)?|[⟲↺])`;
 const T_SPEED = String.raw`(?:Sanftrührstufe|Sanftrühr-?stufe|Stufe\s*(?:${NUM}(?:\s*[-–]\s*${NUM})?|🥄|sanft)|Rührstufe\s*🥄|🥄)`;
 const T_DOUGH = String.raw`(?:Teigstufe|Teigknetstufe|Knetstufe|Teigmodus|Teig-Modus|Teigkneten|Kneten)`;
@@ -16,7 +16,8 @@ const T_TURBO = String.raw`(?:Turbo)`;
 const T_BROWN = String.raw`(?:Anbraten|Anbratmodus|Anbrat-Modus)`;
 const T_TIMES = String.raw`(?:\d+\s*(?:x|Mal|mal))`;
 const TOKEN = `(?:${T_DUR}|${T_TEMP}|${T_DIR}|${T_SPEED}|${T_DOUGH}|${T_TURBO}|${T_BROWN}|${T_TIMES})`;
-const CHAIN_RE = new RegExp(`${TOKEN}(?:\\s*\\/\\s*${TOKEN})+`, 'giu');
+// Trenner: „/“ (Vorwerk-Schreibweise) oder „|“ (Zaubertopf Club: „10 Sek. | Stufe 4“)
+const CHAIN_RE = new RegExp(`${TOKEN}(?:\\s*[\\/|]\\s*${TOKEN})+`, 'giu');
 
 export const DUR_ONLY_RE = new RegExp(`(${NUM})(?:\\s*[-–]\\s*(${NUM}))?\\s*(${DUR_UNIT})`, 'giu');
 
@@ -41,7 +42,7 @@ export function parseDuration(text: string): number | null {
 function classify(piece: string, op: TmSetting): void {
   const p = piece.trim();
   if (full(T_DUR).test(p)) { op.time = parseDuration(p); return; }
-  if (/^Varoma$/i.test(p)) { op.temp = 'Varoma'; return; }
+  if (/^Varoma(®|\(R\))?$/i.test(p)) { op.temp = 'Varoma'; return; }
   if (full(`${NUM}\\s*°\\s*C?`).test(p)) { op.temp = Math.round(toNum(p)); return; }
   if (full(T_DIR).test(p)) { op.reverse = true; return; }
   if (full(T_DOUGH).test(p)) { op.mode = 'dough'; return; }
@@ -84,7 +85,7 @@ export function findSettings(text: string): TmMatch[] {
   const ops: TmMatch[] = [];
   for (const m of String(text).matchAll(CHAIN_RE)) {
     const op: TmMatch = { mode: 'manual', offset: m.index ?? 0, length: m[0].length, match: m[0], warnings: [] };
-    for (const piece of m[0].split('/')) classify(piece, op);
+    for (const piece of m[0].split(/[/|]/)) classify(piece, op);
     // „100°C/Varoma“ ohne Zeit und Stufe ist keine Einstellung
     if (op.mode === 'manual' && op.time == null && op.speed == null) continue;
     if (op.mode === 'dough' && op.time == null) continue;

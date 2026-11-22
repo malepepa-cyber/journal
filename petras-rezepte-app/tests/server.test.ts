@@ -135,3 +135,11 @@ test('Protokoll enthält keine Geheimnisse', async () => {
   const logText = readFileSync(join(DATA, 'logs', 'app.log'), 'utf8');
   assert.ok(!logText.includes('GEHEIMGEHEIM') && !logText.includes('password=abc'));
 });
+
+test('Link abrufen: Schutz vor Adressen im eigenen Netz', async () => {
+  for (const url of ['http://127.0.0.1:47391/api/session', 'http://localhost/', 'http://192.168.178.1/', 'http://10.0.0.5/', 'file:///etc/passwd', 'http://[::1]/', 'https://user:pw@example.com/', 'http://example.com:8080/']) {
+    const r = await api('/api/fetch-url', { method: 'POST', body: JSON.stringify({ url }) });
+    assert.equal(r.status, 400, `${url} → ${r.status} ${JSON.stringify(r.body)}`);
+  }
+  assert.equal((await api('/api/fetch-url', { method: 'POST', body: JSON.stringify({ url: 'kein link' }) })).status, 400);
+});

@@ -6,7 +6,7 @@
  */
 import type { Recipe } from '../shared/model.ts';
 import { findSettings, describeSetting } from '../shared/tm.ts';
-import { extractFromDocument } from './extract.ts';
+import { extractFromDom } from '../shared/sites/generic.ts';
 import { saveInCookidoo } from './cookidoo-browser.ts';
 
 export const TRANSFER_MARK = 'PETRAS-REZEPTE-APP:';
@@ -52,21 +52,40 @@ function panel(title: string): { root: ShadowRoot; close: () => void } {
   return { root, close };
 }
 
-/** Auf einer Rezeptseite: auslesen und kopieren */
+/** Auf einer Rezeptseite: auslesen (inkl. Zaubertopf-Kochmodus) und für die App kopieren */
 async function grab() {
   const { root } = panel('Rezept für Petras Rezepte App');
   const main = root.querySelector('main')!;
-  const { text, source } = extractFromDocument(document, window);
-  const lines = text.split('\n').filter(Boolean);
-  main.innerHTML = `<p>Gelesen aus: <b>${esc(source)}</b></p>
-    <p class="muted">${esc(lines[0] ?? '')} · ${lines.length} Zeilen</p>
+  const sel = String(window.getSelection?.() || '');
+  const res = extractFromDom(document, location.href.split('?')[0], sel);
+  const r = res.recipe;
+  const tm = r.steps.reduce((n, s) => n + findSettings(s.text).length, 0);
+  main.innerHTML = `<p><b>${esc(r.title || 'Ohne Titel')}</b><br><span class="muted">Gelesen aus: ${esc(res.method)} · ${r.ingredients.length} Zutaten · ${r.steps.length} Schritte · ${tm} Thermomix-Einstellungen</span></p>
+    ${res.complete ? '' : `<div class="warn">⚠ ${esc(res.notes[0] ?? 'Rezept unvollständig.')}</div>`}
+    ${res.subRecipes.length ? `<p class="muted" style="margin-top:12px"><b>Verlinkte Teilrezepte</b> – auf Wunsch als eigene Rezepte mitholen:</p>
+      ${res.subRecipes.map((x, i) => `<label style="display:flex;gap:8px;align-items:center;margin:4px 0"><input type="checkbox" data-i="${i}"> ${esc(x.title)}</label>`).join('')}` : ''}
     <button class="btn" id="go">📋 Für die App kopieren</button>
     <p class="muted">Tipp: Wird etwas falsch gelesen, das Rezept auf der Seite markieren und das Lesezeichen erneut klicken.</p>
     <div id="msg"></div>`;
-  root.getElementById('go')!.addEventListener('click', async () => {
-    const ok = await copy(IMPORT_MARK + JSON.stringify({ v: 1, text, source: location.href.split('?')[0], title: document.title }));
+  root.getElementById('go')!.addEventListener('click', async (ev) => {
+    const btn = ev.target as HTMLButtonElement;
+    btn.disabled = true; btn.textContent = '⏳ Wird vorbereitet …';
+    const extra: { title: string; url: string; recipe?: Recipe; error?: string }[] = [];
+    for (const box of Array.from(root.querySelectorAll<HTMLInputElement>('input[type=checkbox]:checked'))) {
+      const link = res.subRecipes[Number(box.dataset.i)];
+      try {
+        // gleiche Website, mit Petras Anmeldung – so, als würde sie den Link selbst öffnen
+        const html = await (await fetch(link.url, { credentials: 'include' })).text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const sub = extractFromDom(doc, link.url);
+        extra.push({ ...link, recipe: sub.recipe });
+      } catch { extra.push({ ...link, error: 'nicht lesbar' }); }
+    }
+    const payload = { v: 2, recipe: r, notes: res.notes, method: res.method, url: location.href.split('?')[0], subRecipes: extra };
+    const ok = await copy(IMPORT_MARK + JSON.stringify(payload));
+    btn.disabled = false; btn.textContent = '📋 Für die App kopieren';
     root.getElementById('msg')!.innerHTML = ok
-      ? `<div class="ok">✅ <b>Kopiert!</b><br>Jetzt in der <b>Petras Rezepte App</b> auf „Rezept importieren“ → <b>„Aus Zwischenablage einfügen“</b> klicken.</div>`
+      ? `<div class="ok">✅ <b>Kopiert!</b>${extra.length ? ` (+ ${extra.filter((x) => x.recipe).length} Teilrezept(e))` : ''}<br>Jetzt zur <b>Petras Rezepte App</b> wechseln – sie übernimmt das Rezept automatisch (sonst „Aus Zwischenablage einfügen“).</div>`
       : '<div class="err">❌ Kopieren hat nicht geklappt.</div>';
   });
 }

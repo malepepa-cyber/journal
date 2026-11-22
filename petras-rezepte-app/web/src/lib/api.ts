@@ -72,6 +72,7 @@ export const Api = {
   renameProfile: (id: number, name: string) => api(`/api/profiles/${id}`, { method: 'PATCH', json: { name } }),
   deleteProfile: (id: number) => api(`/api/profiles/${id}`, { method: 'DELETE' }),
   bookmarklet: () => api<{ code: string }>('/api/bookmarklet'),
+  fetchUrl: (url: string) => api<{ html: string; url: string }>('/api/fetch-url', { method: 'POST', json: { url } }),
   shutdown: () => api('/api/shutdown', { method: 'POST' }),
   heartbeat: () => api('/api/heartbeat', { method: 'POST' }),
   log: (message: string, where = '') => api('/api/log', { method: 'POST', json: { message, where } }).catch(() => {}),

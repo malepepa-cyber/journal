@@ -6,3 +6,6 @@ web/public/ocr/
 build/cache/
 *.log
 .env
+
+# Gespeicherte Seiten aus Rezeptportalen (urheberrechtlich geschützt – nie committen)
+tests/fixtures/privat/
