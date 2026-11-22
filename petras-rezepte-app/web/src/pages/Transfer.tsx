@@ -4,7 +4,7 @@
  * Optional: experimentelle Schnellübertragung per Lesezeichen (nur wenn in den Einstellungen eingeschaltet).
  */
 import { useEffect, useState } from 'react';
-import { Copy, Check, ExternalLink, ArrowLeft, ArrowRight, Send, Zap, Bot, Hand, AlertTriangle, PartyPopper, Pencil, CheckCircle2 } from 'lucide-react';
+import { Copy, Check, ExternalLink, ArrowLeft, ArrowRight, Send, Bot, Hand, AlertTriangle, PartyPopper, Pencil, CheckCircle2, Wand, Bookmark } from 'lucide-react';
 import { ACCESSORIES, type Recipe, type RecipeSummary } from '../../../shared/model.ts';
 import { findSettings, describeSetting, formatSeconds } from '../../../shared/tm.ts';
 import { formatIngredient } from '../../../shared/ingredients.ts';
@@ -128,11 +128,12 @@ export function Transfer({ id }: { id: number | null }) {
     if (r.cookidoo?.status === 'offen') setR(await Api.cookidoo(r.id!, 'in Arbeit'));
   };
   const markDone = async () => { setR(await Api.cookidoo(r.id!, 'übertragen')); toast('Als „In Cookidoo“ markiert'); };
-  const quick = async () => {
-    const ok = await copyText(TRANSFER_MARK + JSON.stringify({ v: 1, allowApi: true, recipe: r }));
+  const startHelper = async () => {
+    const ok = await copyText(TRANSFER_MARK + JSON.stringify({ v: 2, allowApi: settings.experimentalTransfer, recipe: { ...r, steps } }));
     if (!ok) { toast('Kopieren hat nicht geklappt.', 'fehler'); return; }
     await openCookidoo();
-    toast('Kopiert – jetzt in Cookidoo auf das Lesezeichen „➜ Petras Rezepte“ klicken.', 'info');
+    toast('Cookidoo öffnet sich – dort auf das Lesezeichen „➜ Petras Rezepte“ klicken.', 'info');
+    setStep(5);
   };
 
   return (
@@ -156,38 +157,52 @@ export function Transfer({ id }: { id: number | null }) {
       <div className="card p-7">
         {step === 0 && (
           <div className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-3xl bg-sage-50 p-5">
-                <h3 className="mb-2 flex items-center gap-2 font-bold text-sage-700"><Bot size={20} /> Das erledigt die App</h3>
-                <ul className="list-disc space-y-1 pl-5 text-[15px]"><li>Rezept ist erkannt, geprüft und im Cookidoo-Format aufbereitet</li><li>Jeder Text lässt sich mit einem Klick kopieren</li><li>Thermomix-Werte werden pro Schritt groß angezeigt</li><li>Cookidoo wird in Chrome geöffnet</li></ul>
-              </div>
-              <div className="rounded-3xl bg-apricot-100/60 p-5">
-                <h3 className="mb-2 flex items-center gap-2 font-bold text-apricot-700"><Hand size={20} /> Das bestätigst du in Cookidoo</h3>
-                <ul className="list-disc space-y-1 pl-5 text-[15px]"><li>„Rezept erstellen“ anklicken</li><li>Texte einfügen (Strg + V)</li><li>Thermomix-Einstellungen in den Schritten auswählen</li><li>Auf „Speichern“ klicken</li></ul>
-              </div>
-            </div>
-            <p className="text-sm text-ink-soft">Warum nicht vollautomatisch? Vorwerk bietet für Cookidoo keine offizielle Schnittstelle an. Der Assistent nutzt nur die normale Cookidoo-Webseite – so bleibt alles zuverlässig und im Rahmen der Nutzungsbedingungen.</p>
             {pending > 0 && (
               <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-apricot-100 p-4 text-apricot-700">
                 <AlertTriangle /> <span className="flex-1"><b>{pending} Schritt{pending > 1 ? 'e haben' : ' hat'} noch unbestätigte Vorschläge.</b> Unbestätigte Vorschläge werden nicht übertragen.</span>
                 <button className="btn-ghost btn-sm bg-white" onClick={() => go(`rezept/${r.id}`)}>Jetzt prüfen</button>
               </div>
             )}
-            <div className="flex flex-wrap gap-3">
-              <button className="btn-primary px-7 py-4 text-lg" onClick={async () => { await openCookidoo(); setStep(1); }}><ExternalLink size={20} /> Cookidoo öffnen & loslegen</button>
-              <button className="btn-ghost" onClick={() => setStep(1)}>Cookidoo ist schon offen</button>
-            </div>
-            <p className="text-sm text-ink-soft">In Cookidoo: <b>Meine Rezepte → Meine Kreationen → „Rezept erstellen“</b>. Danach hier Schritt für Schritt weiter.</p>
 
-            {settings.experimentalTransfer && (
-              <div className="rounded-3xl border-2 border-dashed border-apricot-300 p-5">
-                <h3 className="mb-1 flex items-center gap-2 font-bold"><Zap size={20} className="text-apricot-500" /> Schnellübertragung (experimentell)</h3>
-                <p className="mb-3 text-sm text-ink-soft">Füllt „Meine Kreationen“ automatisch über das Lesezeichen in deinem angemeldeten Chrome. Nutzt die Schnittstelle der Cookidoo-Webseite, die nicht offiziell dokumentiert ist – kann jederzeit aufhören zu funktionieren. Ergebnis bitte in Cookidoo prüfen.</p>
-                <ol className="mb-4 list-decimal space-y-1 pl-5 text-[15px]"><li>„Vorbereiten & Cookidoo öffnen“ klicken</li><li>In Cookidoo auf das Lesezeichen <b>„➜ Petras Rezepte“</b> klicken</li><li>„In ‚Meine Kreationen‘ speichern“ klicken</li></ol>
-                <div className="flex flex-wrap gap-3"><button className="btn-accent" onClick={quick}><Zap size={18} /> Vorbereiten & Cookidoo öffnen</button>
-                  <button className="btn-ghost" onClick={() => { markDone(); setStep(5); }}>Hat geklappt – als übertragen markieren</button></div>
+            <div className="rounded-3xl border-2 border-sage-300 bg-sage-50/60 p-6">
+              <div className="mb-1 flex flex-wrap items-center gap-2"><Wand size={22} className="text-sage-700" /><h3 className="text-xl font-bold">Ausfüllhilfe</h3><span className="chip bg-sage-600 text-white">empfohlen</span></div>
+              <p className="mb-4 text-ink-soft">Das Lesezeichen <b>„➜ Petras Rezepte“</b> trägt Name, Zutaten und Schritte mit Thermomix-Knöpfen direkt in den Cookidoo-Editor ein – über die normale Cookidoo-Oberfläche. Du prüfst und bestätigst.</p>
+              <ol className="mb-5 space-y-2 text-[15px]">
+                {[
+                  ['Ausfüllhilfe starten', 'Rezept wird vorbereitet, Cookidoo öffnet sich bei „Meine Kreationen“.'],
+                  ['Lesezeichen → „Rezept in Cookidoo anlegen“', 'Der Name wird in Cookidoos Dialog eingetragen.'],
+                  ['Im Editor: Lesezeichen → „Weiter zu Zutaten & Rezeptschritte“', 'Portionen und Zeiten werden zum Eintragen angezeigt.'],
+                  ['Lesezeichen → „Zutaten & Schritte eintragen“', 'Alles wird nacheinander eingetragen. Danach „Bestätigen“.'],
+                ].map(([t, d], i) => (
+                  <li key={t} className="flex gap-3"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-sage-600 text-sm font-bold text-white">{i + 1}</span><span><b>{t}</b><br /><span className="text-ink-soft">{d}</span></span></li>
+                ))}
+              </ol>
+              <div className="flex flex-wrap gap-3">
+                <button className="btn-primary px-7 py-4 text-lg" onClick={startHelper}><Wand size={20} /> Ausfüllhilfe starten</button>
+                <button className="btn-ghost" onClick={() => go('einstellungen')}><Bookmark size={18} /> Lesezeichen einrichten</button>
               </div>
-            )}
+            </div>
+
+            <div className="rounded-3xl bg-cream-100 p-6">
+              <h3 className="mb-1 text-lg font-bold">Oder Schritt für Schritt selbst eingeben</h3>
+              <p className="mb-4 text-ink-soft">Ohne Lesezeichen: Der Assistent zeigt jeden Text zum Kopieren und die Thermomix-Werte groß an.</p>
+              <div className="flex flex-wrap gap-3">
+                <button className="btn-soft" onClick={async () => { await openCookidoo(); setStep(1); }}><ExternalLink size={18} /> Cookidoo öffnen & Assistent starten</button>
+                <button className="btn-ghost" onClick={() => setStep(1)}>Cookidoo ist schon offen</button>
+              </div>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-3xl bg-sage-50 p-5 text-[15px]">
+                <h3 className="mb-2 flex items-center gap-2 font-bold text-sage-700"><Bot size={20} /> Das erledigt die App</h3>
+                <ul className="list-disc space-y-1 pl-5"><li>Rezept erkennen, prüfen, aufbereiten</li><li>Namen, Zutaten und Schritte eintragen (Ausfüllhilfe)</li><li>Thermomix-Knöpfe für Zeit · Temperatur · Stufe · Linkslauf</li></ul>
+              </div>
+              <div className="rounded-3xl bg-apricot-100/60 p-5 text-[15px]">
+                <h3 className="mb-2 flex items-center gap-2 font-bold text-apricot-700"><Hand size={20} /> Das bestätigst du</h3>
+                <ul className="list-disc space-y-1 pl-5"><li>Lesezeichen anklicken (3×)</li><li>Portionen & Zeiten eintragen</li><li>Teig/Turbo/Anbraten ggf. per „Koch-Einstellungen“ ergänzen</li><li>Ergebnis prüfen und „Bestätigen“</li></ul>
+              </div>
+            </div>
+            <p className="text-sm text-ink-soft">Vorwerk bietet keine offizielle Schnittstelle. Die Ausfüllhilfe bedient nur die normale Cookidoo-Webseite in deinem angemeldeten Chrome – kein Passwort, kein fremder Server.</p>
+            <button className="btn-ghost btn-sm" onClick={() => { markDone(); setStep(5); }}><Check size={16} /> Ist schon in Cookidoo – als übertragen markieren</button>
           </div>
         )}
 

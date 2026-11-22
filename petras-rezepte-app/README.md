@@ -27,7 +27,7 @@ Die App öffnet sich als eigenes Fenster in **Google Chrome** (falls Chrome fehl
 | **1. Importieren** | „Rezept importieren“ → Text aus dem Zaubertopf Club einfügen **oder** PDF hineinziehen. PDF erzeugen: im Browser **Strg + P → „Als PDF speichern“**. Auch Word (.docx), TXT und Fotos/Scans (Texterkennung) gehen. |
 | **2. Prüfen** | Die App erkennt Name, Portionen, Zeiten, Zutaten (Menge · Einheit · Zutat), Schritte und Thermomix-Einstellungen. **Grüne Knöpfe** stehen so im Rezept. **Gestrichelte Knöpfe** sind *Vorschläge* der App – sie gelten erst nach „Übernehmen“. Ein Klick auf einen Knopf öffnet die Einstellung zum Ändern (Zeit, Temperatur, Stufe, Linkslauf, Teig, Anbraten, Turbo, Varoma). |
 | **3. Speichern** | Das Rezept landet in „Meine Rezepte“. Alles wird zusätzlich **automatisch zwischengespeichert**. |
-| **4. Cookidoo** | „Speichern & zu Cookidoo“ → der Assistent öffnet Cookidoo und zeigt Schritt für Schritt, was wohin gehört – jeder Text mit **Kopieren**-Knopf, die Thermomix-Werte groß wie am Display. |
+| **4. Cookidoo** | „Speichern & zu Cookidoo“ → **Ausfüllhilfe starten** (empfohlen, siehe unten) – oder der Schritt-für-Schritt-Assistent mit **Kopieren**-Knöpfen und großen Thermomix-Werten. |
 | **5. Am TM6** | Cookidoo → Meine Rezepte → **Meine Kreationen** → Rezept starten. |
 
 ![Import](docs/bilder/2-import.png)
@@ -44,6 +44,15 @@ Die App öffnet sich als eigenes Fenster in **Google Chrome** (falls Chrome fehl
   können per Häkchen gleich mitgeholt werden.
 * **Gespeicherte Seite:** Rezeptseite angemeldet mit **Strg + S** speichern und die .html-Datei in die App ziehen.
 * Die App speichert **kein** Club-Passwort.
+
+### Ausfüllhilfe für den Cookidoo-Editor (neu in 1.2)
+Das Lesezeichen **„➜ Petras Rezepte“** füllt den Cookidoo-Editor über dessen normale Oberfläche aus:
+1. In der App: „Cookidoo übertragen“ → **„Ausfüllhilfe starten“** (Cookidoo öffnet sich bei „Meine Kreationen“).
+2. Lesezeichen → **„Rezept in Cookidoo anlegen“** – trägt den Namen in Cookidoos Dialog ein (warnt, wenn es den Namen schon gibt).
+3. Im Editor: Lesezeichen → **„Weiter zu Zutaten & Rezeptschritte“** (Portionen/Zeiten werden zum Eintragen angezeigt).
+4. Lesezeichen → **„Zutaten & Schritte eintragen“** – jede Zutat und jeder Schritt wird nacheinander eingetragen und mit
+   Cookidoos ✓ gespeichert; Zeit · Temperatur · Stufe · Linkslauf als echter Thermomix-Knopf (`<cr-tts>`, wie im Editor).
+   Modi wie Teig, Turbo oder Anbraten meldet die Hilfe zum Ergänzen über „Koch-Einstellungen“. Danach „Bestätigen“.
 
 ### Noch schneller: Lesezeichen „➜ Petras Rezepte“
 Einstellungen → Cookidoo → den grünen Knopf in die Lesezeichenleiste ziehen (Leiste einblenden: **Strg + Umschalt + B**).
@@ -115,6 +124,7 @@ npm start              # Dienst starten (öffnet Chrome); --no-browser zum Teste
 npm run dev            # Entwicklung: Dienst (Port 47123) + Vite (Port 5173)
 npm test               # 36 Unit-/Integrationstests
 node tests/e2e/link-import.cjs  # E2E: Link einfügen, Lesezeichen, gespeicherte Seiten
+node tests/e2e/cookidoo-fill.cjs # E2E: Ausfüllhilfe gegen nachgebauten Cookidoo-Editor
 npm run test:e2e       # Browser-Ende-zu-Ende-Test (Playwright, benötigt Chromium)
 npm run typecheck
 npm run dist:win       # Windows-EXE + Installer → release/  (benötigt makensis, unzip)
@@ -136,8 +146,9 @@ Umgebungsvariablen für Tests: `PRA_DATA_DIR`, `PRA_PORT`, `PRA_TOKEN`, `PRA_NO_
   und Bild, **gescannte PDF (OCR)**, Text-Import → Vorschlag → Speichern → Bibliothek → Favorit → Assistent.
 * ✅ Lesezeichen gegen nachgebaute Zaubertopf-/Cookidoo-Seiten; ZauberTopf-Leser mit drei echten, angemeldet gespeicherten
   Club-Seiten (liegen nur lokal in `tests/fixtures/privat/`, werden wegen Urheberrecht nie committet).
+* ✅ Ausfüllhilfe gegen einen nachgebauten Cookidoo-Editor (Aufbau aus einer gespeicherten Editor-Seite).
 * ⚠️ **Noch nicht auf echtem Windows getestet** (Build entsteht unter Linux; Struktur der EXE und Inhalt des Installers
-  sind geprüft). Ebenfalls ungetestet: echtes cookidoo.de, echte Zaubertopf-Seiten, KI mit echtem Schlüssel.
+  sind geprüft). Ebenfalls ungetestet: echtes cookidoo.de (insb. ob der echte Editor die eingetragenen Inhalte genauso übernimmt), echte Zaubertopf-Seiten, KI mit echtem Schlüssel.
 
 ### Veröffentlichung (später)
 * Code-Signing-Zertifikat besorgen und EXE + Installer signieren (verhindert die SmartScreen-Warnung).

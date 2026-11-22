@@ -1,7 +1,7 @@
 {
   "name": "petras-rezepte-app",
   "productName": "Petras Rezepte App",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "Rezepte aus PDF, Text oder Webseiten für den Thermomix TM6 aufbereiten, verwalten und nach Cookidoo übertragen.",
   "author": "Patrick S.",

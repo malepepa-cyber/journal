@@ -5,9 +5,10 @@
  *   experimentelle Schnellübertragung eingeschaltet wurde (Kennzeichen im kopierten Paket).
  */
 import type { Recipe } from '../shared/model.ts';
-import { findSettings, describeSetting } from '../shared/tm.ts';
+import { findSettings } from '../shared/tm.ts';
 import { extractFromDom } from '../shared/sites/generic.ts';
 import { saveInCookidoo } from './cookidoo-browser.ts';
+import { ingredientLines, stepHtml } from '../shared/cookidoo-ui.ts';
 
 export const TRANSFER_MARK = 'PETRAS-REZEPTE-APP:';
 export const IMPORT_MARK = 'PETRAS-REZEPTE-IMPORT:';
@@ -90,49 +91,160 @@ async function grab() {
   });
 }
 
-/** Auf cookidoo.de: vorbereitetes Rezept speichern (experimentell) */
+// ======================= Cookidoo =======================
+interface TransferPayload { v: number; allowApi: boolean; recipe: Recipe; servings?: string }
+const STORE = 'petras-rezepte-app:rezept';
+
+/** Vorbereitetes Rezept: aus der Zwischenablage, sonst aus dem Zwischenspeicher dieses Tabs */
+async function loadPayload(): Promise<TransferPayload | null> {
+  try {
+    const t = (await navigator.clipboard.readText()).trim();
+    if (t.startsWith(TRANSFER_MARK)) {
+      const p = JSON.parse(t.slice(TRANSFER_MARK.length));
+      try { sessionStorage.setItem(STORE, JSON.stringify(p)); } catch { /* egal */ }
+      return p;
+    }
+  } catch { /* Zwischenablage nicht erlaubt */ }
+  try { const s = sessionStorage.getItem(STORE); return s ? JSON.parse(s) : null; } catch { return null; }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+async function waitFor<T>(fn: () => T | null | undefined | false, ms = 8000): Promise<T> {
+  const end = Date.now() + ms;
+  for (;;) {
+    const v = fn();
+    if (v) return v as T;
+    if (Date.now() > end) throw new Error('Zeitüberschreitung – die Cookidoo-Seite hat nicht wie erwartet reagiert.');
+    await sleep(120);
+  }
+}
+const isOpen = (el: Element | null) => !!el && el.getAttribute('hidden') !== 'true' && !el.hasAttribute('hidden');
+
+/** Text in ein Cookidoo-Eingabefeld (contenteditable) setzen – wie Einfügen per Tastatur */
+function fillField(field: HTMLElement, html: string, asHtml: boolean) {
+  field.focus();
+  const sel = window.getSelection();
+  const range = document.createRange(); range.selectNodeContents(field);
+  sel?.removeAllRanges(); sel?.addRange(range);
+  let ok = false;
+  try { ok = document.execCommand(asHtml ? 'insertHTML' : 'insertText', false, html); } catch { /* Fallback */ }
+  if (!ok || (asHtml && html.includes('<cr-tts') && !field.querySelector('cr-tts'))) {
+    if (asHtml) field.innerHTML = html; else field.textContent = html;
+    field.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertFromPaste' }));
+  }
+}
+
+async function addEntry(kind: 'ingredients' | 'steps', content: string, asHtml: boolean) {
+  const list = document.querySelector(`cr-manage-list[name="${kind}"]`);
+  const before = list?.querySelectorAll('.cr-manage-list__item').length ?? 0;
+  const trigger = document.getElementById(`add-${kind}`) as HTMLElement | null;
+  if (!trigger) throw new Error('Der Knopf zum Hinzufügen wurde nicht gefunden.');
+  trigger.click();
+  const modal = await waitFor(() => { const m = document.getElementById(`${kind}-modal`); return isOpen(m) ? m : null; });
+  const field = modal!.querySelector('cr-text-field') as HTMLElement;
+  fillField(field, content, asHtml);
+  await sleep(150);
+  (modal!.querySelector('.cr-edit-modal__save') as HTMLElement).click();
+  await waitFor(() => (list?.querySelectorAll('.cr-manage-list__item').length ?? 0) > before || !isOpen(modal), 12000);
+  await sleep(250);
+}
+
 async function transfer() {
   const { root } = panel('Petras Rezepte → Cookidoo');
   const main = root.querySelector('main')!;
-  main.innerHTML = `<p class="muted">Lese das vorbereitete Rezept aus der Zwischenablage …</p>
-    <textarea id="in" style="width:100%;min-height:70px;border:1px solid #ddd;border-radius:10px;padding:8px" placeholder="Falls nichts erscheint: hier klicken und Strg + V drücken"></textarea>
-    <div id="pv"></div><div id="msg"></div>`;
-  const input = root.getElementById('in') as HTMLTextAreaElement;
-  const show = (raw: string) => {
-    const t = raw.trim();
-    if (!t.startsWith(TRANSFER_MARK)) {
-      root.getElementById('pv')!.innerHTML = t ? '<div class="err">Das ist kein vorbereitetes Rezept. Bitte in der App unter „Cookidoo übertragen“ zuerst auf „Schnellübertragung vorbereiten“ klicken.</div>' : '';
-      return;
-    }
-    let payload: { v: number; allowApi: boolean; recipe: Recipe };
-    try { payload = JSON.parse(t.slice(TRANSFER_MARK.length)); } catch { return; }
-    const r = payload.recipe;
-    if (!payload.allowApi) {
-      root.getElementById('pv')!.innerHTML = '<div class="warn">Die Schnellübertragung ist in der App ausgeschaltet. Bitte den <b>Übertragungsassistenten</b> in der App verwenden.</div>';
-      return;
-    }
-    const buttons = r.steps.reduce((n, s) => n + findSettings(s.text).length, 0);
-    root.getElementById('pv')!.innerHTML = `<p><b>${esc(r.title)}</b><br><span class="muted">${r.ingredients.length} Zutaten · ${r.steps.length} Schritte · ${buttons} Thermomix-Einstellungen</span></p>
-      <ol>${r.steps.slice(0, 30).map((s) => `<li>${esc(s.text.length > 80 ? `${s.text.slice(0, 80)}…` : s.text)}<br>${findSettings(s.text).map((o) => `<span class="tm">${esc(describeSetting(o).join(' · '))}</span>`).join('')}</li>`).join('')}</ol>
-      <div class="warn">Experimentell: nutzt dieselbe Schnittstelle wie die Cookidoo-Webseite (nicht offiziell dokumentiert). Bitte das Ergebnis in Cookidoo kurz prüfen.</div>
-      <button class="btn" id="save">☁️ In „Meine Kreationen“ speichern</button>`;
-    root.getElementById('save')!.addEventListener('click', async (ev) => {
-      const btn = ev.target as HTMLButtonElement;
-      btn.disabled = true; btn.textContent = '⏳ Wird gespeichert …';
+  const payload = await loadPayload();
+  if (!payload?.recipe) {
+    main.innerHTML = `<p>Kein vorbereitetes Rezept gefunden.</p><p class="muted">In der <b>Petras Rezepte App</b> unter „Cookidoo übertragen“ auf <b>„Ausfüllhilfe starten“</b> klicken, dann hier das Lesezeichen erneut anklicken.</p>`;
+    return;
+  }
+  const r = payload.recipe;
+  const path = location.pathname;
+  const lang = path.match(/\/([a-z]{2}-[A-Z]{2})(?:\/|$)/)?.[1] ?? 'de-DE';
+  const editStepsPage = /\/created-recipes\/[a-z]{2}-[A-Z]{2}\/[A-Za-z0-9]+\/edit\/ingredients-and-preparation-steps/.test(path);
+  const editPage = /\/created-recipes\/[a-z]{2}-[A-Z]{2}\/[A-Za-z0-9]+\/edit\/?$/.test(path);
+  const head = `<p><b>${esc(r.title)}</b><br><span class="muted">${r.ingredients.length} Zutaten · ${r.steps.length} Schritte</span></p>`;
+
+  // ---------- 3) Zutaten & Rezeptschritte eintragen ----------
+  if (editStepsPage) {
+    const ingr = ingredientLines(r);
+    const steps = r.steps.filter((s) => s.text.trim()).map(stepHtml);
+    const existing = document.querySelectorAll('cr-manage-list .cr-manage-list__item').length;
+    const buttons = steps.reduce((n, s) => n + s.buttons, 0);
+    const manual = steps.flatMap((s, i) => s.manual.map((m) => `Schritt ${i + 1}: ${m}`));
+    main.innerHTML = `${head}
+      <p>Die Ausfüllhilfe trägt <b>${ingr.length} Zutaten</b> und <b>${steps.length} Schritte</b> mit <b>${buttons} Thermomix-Einstellungen</b> nacheinander in dieses Formular ein – so, als würdest du tippen.</p>
+      ${existing ? `<div class="warn">⚠ Hier stehen schon ${existing} Einträge. Die neuen werden darunter angehängt.</div>` : ''}
+      <button class="btn" id="fill">✍️ Zutaten & Schritte eintragen</button>
+      <div id="msg"></div>`;
+    root.getElementById('fill')!.addEventListener('click', async (ev) => {
+      const btn = ev.target as HTMLButtonElement; btn.disabled = true;
+      const msg = root.getElementById('msg')!;
       try {
-        const res = await saveInCookidoo(r);
-        const note = ['', 'Einige Sondereinstellungen (Varoma/Sanftrührstufe/Teig/Turbo/Anbraten) wurden vereinfacht – bitte prüfen.', 'Die Einstellungs-Knöpfe wurden nicht angenommen – die Schritte stehen als Text drin.'][res.level];
-        root.getElementById('msg')!.innerHTML = `<div class="ok">✅ <b>Gespeichert!</b> ${res.buttons} Thermomix-Knöpfe in ${res.steps} Schritten.${note ? `<br>${esc(note)}` : ''}<br>
-          Auf dem TM6: <i>Meine Rezepte → Meine Kreationen</i>.<br><a href="${esc(res.url)}">Rezept in Cookidoo öffnen</a></div>`;
-        btn.textContent = '✓ Gespeichert';
+        (document.getElementById('ingredients-button') as HTMLElement | null)?.click();
+        await sleep(300);
+        for (let i = 0; i < ingr.length; i++) { btn.textContent = `⏳ Zutat ${i + 1} von ${ingr.length} …`; await addEntry('ingredients', ingr[i], false); }
+        (document.getElementById('preparation-steps-button') as HTMLElement | null)?.click();
+        await sleep(400);
+        for (let i = 0; i < steps.length; i++) { btn.textContent = `⏳ Schritt ${i + 1} von ${steps.length} …`; await addEntry('steps', steps[i].html, true); }
+        btn.textContent = '✓ Eingetragen';
+        msg.innerHTML = `<div class="ok">✅ <b>Fertig eingetragen.</b><br>Bitte kurz durchsehen (Thermomix-Knöpfe in den Schritten) und oben auf <b>„Bestätigen“</b> klicken.</div>
+          ${manual.length ? `<div class="warn">Bitte diese Einstellung(en) im Schritt über das Symbol <b>„Koch-Einstellungen“</b> ergänzen: ${manual.map(esc).join(' · ')}</div>` : ''}`;
+        try { sessionStorage.removeItem(STORE); } catch { /* egal */ }
       } catch (e: any) {
-        root.getElementById('msg')!.innerHTML = `<div class="err">❌ <b>${esc(e.message)}</b><br><span class="muted">Der Übertragungsassistent in der App funktioniert unabhängig davon.</span></div>`;
         btn.disabled = false; btn.textContent = 'Nochmal versuchen';
+        msg.innerHTML = `<div class="err">❌ ${esc(e.message)}<br><span class="muted">Die übrigen Einträge bitte über den Übertragungsassistenten der App kopieren.</span></div>`;
       }
     });
-  };
-  input.addEventListener('input', () => show(input.value));
-  try { const t = await navigator.clipboard.readText(); if (t) { input.value = t; show(t); } } catch { input.focus(); }
+    return;
+  }
+
+  // ---------- 2) Editor-Hauptseite: Portionen/Zeiten zeigen, weiter zu Zutaten & Schritten ----------
+  if (editPage) {
+    const rows = [['Portionen', r.servings ? `${r.servings}` : ''], ['Arbeitszeit (Min.)', r.prepTime ? `${r.prepTime}` : ''], ['Gesamtzeit (Min.)', r.totalTime ? `${r.totalTime}` : '']].filter((x) => x[1]);
+    main.innerHTML = `${head}
+      ${rows.length ? `<p class="muted">Diese Werte hier im Editor eintragen:</p><ul>${rows.map(([k, v]) => `<li>${esc(k)}: <b>${esc(v)}</b></li>`).join('')}</ul>` : ''}
+      <button class="btn" id="next">➜ Weiter zu „Zutaten & Rezeptschritte“</button>
+      <p class="muted">Dort das Lesezeichen noch einmal anklicken.</p>`;
+    root.getElementById('next')!.addEventListener('click', () => { location.href = `${path.replace(/\/$/, '')}/ingredients-and-preparation-steps?active=ingredients`; });
+    return;
+  }
+
+  // ---------- 1) Übersicht „Meine Kreationen“: Rezept anlegen ----------
+  const tiles = Array.from(document.querySelectorAll('core-tile img[alt]')).map((i) => (i.getAttribute('alt') ?? '').trim().toLowerCase());
+  const exists = tiles.includes(r.title.trim().toLowerCase());
+  const onList = new RegExp(`/created-recipes/${lang}/?$`).test(path);
+  main.innerHTML = `${head}
+    ${exists ? `<div class="warn">⚠ In „Meine Kreationen“ gibt es schon ein Rezept mit diesem Namen.</div>` : ''}
+    <button class="btn" id="create">➕ Rezept in Cookidoo anlegen</button>
+    <p class="muted">Trägt den Namen in Cookidoos Dialog „Eigenes Rezept erstellen“ ein. Danach im Editor das Lesezeichen erneut anklicken.</p>
+    ${payload.allowApi ? `<div class="warn" style="margin-top:14px"><b>Schnellübertragung (experimentell)</b> – speichert alles auf einmal über die interne Schnittstelle der Webseite.<button class="btn" id="api" style="background:#C9733F">⚡ Schnellübertragung</button></div>` : ''}
+    <div id="msg"></div>`;
+  root.getElementById('create')!.addEventListener('click', async () => {
+    try {
+      if (!onList) { location.href = `/created-recipes/${lang}`; return; }
+      (document.getElementById('create-button') as HTMLElement | null)?.click();
+      const input = await waitFor(() => { const i = document.getElementById('recipe-title') as HTMLInputElement | null; return i && i.offsetParent !== null ? i : null; }, 5000);
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      setter.call(input, r.title.slice(0, 120));
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(200);
+      (input.form?.querySelector('button[type="submit"]') as HTMLElement | null)?.click();
+      root.getElementById('msg')!.innerHTML = '<div class="ok">✅ Rezept wird angelegt … Im Editor dann das Lesezeichen erneut anklicken.</div>';
+    } catch (e: any) {
+      root.getElementById('msg')!.innerHTML = `<div class="err">❌ ${esc(e.message)}<br>Bitte auf „Rezept erstellen“ klicken und den Namen einfügen: <b>${esc(r.title)}</b></div>`;
+    }
+  });
+  root.getElementById('api')?.addEventListener('click', async (ev) => {
+    const btn = ev.target as HTMLButtonElement; btn.disabled = true; btn.textContent = '⏳ Wird gespeichert …';
+    try {
+      const res = await saveInCookidoo(r);
+      root.getElementById('msg')!.innerHTML = `<div class="ok">✅ <b>Gespeichert!</b> ${res.buttons} Thermomix-Knöpfe in ${res.steps} Schritten.<br><a href="${esc(res.url)}/edit">Im Editor prüfen</a></div>`;
+      btn.textContent = '✓ Gespeichert';
+    } catch (e: any) {
+      root.getElementById('msg')!.innerHTML = `<div class="err">❌ ${esc(e.message)}</div>`; btn.disabled = false; btn.textContent = 'Nochmal versuchen';
+    }
+  });
 }
 
 export function run() {
