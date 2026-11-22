@@ -1,0 +1,8 @@
+node_modules/
+dist/
+release/
+web/dist/
+web/public/ocr/
+build/cache/
+*.log
+.env

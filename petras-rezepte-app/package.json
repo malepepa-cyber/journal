@@ -1,0 +1,50 @@
+{
+  "name": "petras-rezepte-app",
+  "productName": "Petras Rezepte App",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Rezepte aus PDF, Text oder Webseiten für den Thermomix TM6 aufbereiten, verwalten und nach Cookidoo übertragen.",
+  "author": "Patrick S.",
+  "license": "SEE LICENSE IN LICENSE.txt",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "tsx watch server/main.ts --dev",
+    "dev:web": "vite --config web/vite.config.ts",
+    "build": "node build/build.mjs",
+    "build:web": "vite build --config web/vite.config.ts",
+    "start": "node dist/server.cjs",
+    "test": "node --test --import tsx \"tests/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "dist:win": "node build/build.mjs --win",
+    "test:e2e": "node tests/e2e/e2e.cjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.12.0",
+    "@tesseract.js-data/deu": "^1.0.0",
+    "lucide-react": "^1.77.0",
+    "mammoth": "^1.13.0",
+    "pdfjs-dist": "^5.7.284",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tesseract.js": "^7.0.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "concurrently": "^10.0.7",
+    "esbuild": "^0.28.2",
+    "postject": "^1.0.0-alpha.6",
+    "tailwindcss": "^4.3.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  }
+}

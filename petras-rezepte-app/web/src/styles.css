@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+/* Designsystem: Cremeweiß, dezentes Grün, warme Akzente */
+@theme {
+  --color-cream-50: #FFFDF8;
+  --color-cream-100: #FBF8F1;
+  --color-cream-200: #F4EFE3;
+  --color-cream-300: #E9E1CF;
+  --color-sage-50: #EEF4EA;
+  --color-sage-100: #DDE9D6;
+  --color-sage-300: #A9C59B;
+  --color-sage-500: #6B9A5B;
+  --color-sage-600: #4E7A4C;
+  --color-sage-700: #3D623C;
+  --color-sage-900: #22381F;
+  --color-apricot-100: #FCE9DA;
+  --color-apricot-300: #F2C9A0;
+  --color-apricot-500: #D9774B;
+  --color-apricot-700: #A8532D;
+  --color-ink: #2B2A26;
+  --color-ink-soft: #6E6A60;
+  --color-ink-faint: #A19B8E;
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --radius-xl2: 1.25rem;
+  --shadow-soft: 0 1px 2px rgba(43, 42, 38, .05), 0 8px 24px rgba(43, 42, 38, .06);
+  --shadow-lift: 0 2px 4px rgba(43, 42, 38, .06), 0 16px 40px rgba(43, 42, 38, .12);
+}
+
+html { font-size: 17px; }
+body { @apply bg-cream-100 text-ink antialiased; font-family: var(--font-sans); }
+::selection { background: var(--color-apricot-300); }
+h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.015em; }
+
+@utility card {
+  @apply rounded-3xl bg-cream-50 border border-cream-300/70 shadow-[var(--shadow-soft)];
+}
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 font-semibold transition active:translate-y-px disabled:opacity-50 disabled:pointer-events-none cursor-pointer select-none;
+}
+@utility btn-primary {
+  @apply btn bg-sage-600 text-white hover:bg-sage-700 shadow-[0_6px_18px_rgba(78,122,76,.30)];
+}
+@utility btn-accent {
+  @apply btn bg-apricot-500 text-white hover:bg-apricot-700 shadow-[0_6px_18px_rgba(217,119,75,.30)];
+}
+@utility btn-ghost {
+  @apply btn bg-transparent border border-cream-300 text-ink hover:border-sage-500 hover:text-sage-700;
+}
+@utility btn-soft {
+  @apply btn bg-sage-50 text-sage-700 hover:bg-sage-100;
+}
+@utility btn-sm {
+  @apply px-3 py-2 text-sm rounded-xl;
+}
+@utility input {
+  @apply w-full rounded-2xl border border-cream-300 bg-white px-4 py-3 text-ink outline-none transition placeholder:text-ink-faint focus:border-sage-500 focus:ring-4 focus:ring-sage-100;
+}
+@utility label {
+  @apply mb-1.5 block text-sm font-medium text-ink-soft;
+}
+@utility chip {
+  @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium;
+}
+@utility tm-pill {
+  @apply inline-flex items-center gap-1.5 rounded-xl bg-sage-600 px-3 py-1.5 text-sm font-semibold text-white;
+}
