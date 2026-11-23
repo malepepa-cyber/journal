@@ -19,7 +19,7 @@ import { PageHeader, ProgressOverlay, useToast } from '../components/ui.tsx';
 
 export const IMPORT_MARK = 'PETRAS-REZEPTE-IMPORT:';
 const ZAUBERTOPF_URL = 'https://www.zaubertopf-club.de/';
-const COOKIDOO_URL = 'https://cookidoo.de/foundation/de-DE/for-you';
+const KREATIONEN_URL = 'https://cookidoo.de/created-recipes/de-DE';
 
 /** Websites, die Rezepte nur angemeldeten Mitgliedern vollständig zeigen */
 const LOGIN_SITES = /(^|\.)zaubertopf-club\.de$/i;
@@ -106,6 +106,7 @@ export function ImportPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const uploadRef = useRef<HTMLElement>(null);
   const aiAvailable = !!session?.settings.aiEnabled && !!session?.aiKey;
+  const kreationen = session?.settings.cookidooUrl || KREATIONEN_URL;
 
   const updateGuide = (fn: (g: GuideState) => GuideState) => setGuide((g) => { const n = fn(g); saveGuide(n); return n; });
   const done = (step: number) => updateGuide((g) => ({ ...g, done: { ...g.done, [step]: true } }));
@@ -320,10 +321,12 @@ export function ImportPage() {
             </GuideStep>
             <GuideStep n={5} icon={<Send size={26} />} title="Übertrage dein Rezept nach Cookidoo" done={!!guide.done[5]} active={firstOpen === 5}
               action={<>
-                <button className="btn-primary btn-sm" onClick={() => { openInChrome(COOKIDOO_URL); done(5); }}><ExternalLink size={16} /> Cookidoo öffnen</button>
+                <button className="btn-primary btn-sm" onClick={() => { openInChrome(kreationen); done(5); }}><ExternalLink size={16} /> Meine Kreationen öffnen</button>
                 <button className="btn-ghost btn-sm" onClick={() => go('cookidoo')}>Zum Assistenten</button>
               </>}>
               Übernimm dein fertiges Rezept in Cookidoo unter „Meine Kreationen“. Danach steht es auf deinem Thermomix TM6 bereit, sobald es gespeichert und synchronisiert ist.
+              <a href={kreationen} onClick={(e) => { e.preventDefault(); openInChrome(kreationen); done(5); }}
+                className="mt-2 block break-all font-semibold text-sage-700 underline">{kreationen}</a>
             </GuideStep>
           </ol>
         )}
