@@ -96,6 +96,9 @@ export function ImportPage() {
   const [guide, setGuide] = useState<GuideState>(loadGuide);
   const [file, setFile] = useState<File | null>(null);
   const [extras, setExtras] = useState<File[]>([]);
+  const [fileError, setFileError] = useState<{ text: string; html?: string } | null>(null);
+  const [hasDraft, setHasDraft] = useState(false);
+  useEffect(() => { Api.draft().then((d) => setHasDraft(!!d)).catch(() => {}); }, []);
   const [text, setText] = useState('');
   const [showText, setShowText] = useState(false);
   const [link, setLink] = useState('');
@@ -125,7 +128,7 @@ export function ImportPage() {
   }
 
   async function finish(recipe: Recipe, notes: string[]) {
-    done(3); done(4);
+    done(1); done(2); done(3);
     await openAsDraft(recipe, notes);
   }
 
@@ -197,21 +200,26 @@ export function ImportPage() {
   function chooseFiles(list: File[]) {
     const main = pickMain(list);
     if (!main) { toast('Keine passende Rezeptdatei gefunden. Möglich sind PDF, HTML, Word, TXT und Bilder.', 'fehler'); return; }
-    setFile(main);
+    setFile(main); setFileError(null);
     setExtras(list.filter((f) => f !== main && kindOf(f) === 'image'));
     done(1); done(2);
-    setTimeout(() => document.getElementById('erkennen')?.focus(), 50);
+    // direkt zum Knopf „Rezept jetzt erkennen“ springen – kein Suchen auf der Seite
+    setTimeout(() => {
+      const b = document.getElementById('erkennen');
+      b?.scrollIntoView({ behavior: 'smooth', block: 'center' }); b?.focus({ preventScroll: true });
+    }, 80);
   }
 
   async function recognise() {
     if (!file) return;
+    setFileError(null);
     setBusy({ label: 'Datei wird gelesen …', value: 0.05 });
     try {
       const r = await fileToText(file, (p) => setBusy({ label: p.label, value: Math.min(0.8, p.value) }));
       if (r.kind === 'html') {
         setBusy({ label: 'Rezept wird erkannt …', value: 0.6 });
         if (!(await fromHtml(r.text, '', file.name, extras))) {
-          toast('Die gespeicherte Seite enthält nur eine Vorschau – sie wurde vermutlich ohne Anmeldung gespeichert. Bitte im Club anmelden und erneut speichern.', 'fehler');
+          setFileError({ text: 'In der gespeicherten Seite wurde kein vollständiges Rezept gefunden. Meist wurde sie ohne Anmeldung gespeichert (dann zeigt der Club nur eine Vorschau). Bitte im Zaubertopf Club anmelden, das Rezept öffnen und erneut mit Strg + S speichern.', html: r.text });
         }
         return;
       }
@@ -219,7 +227,7 @@ export function ImportPage() {
       if (r.kind === 'doc') toast('Ältere Word-Datei: Der Text wurde nach bestem Vermögen gelesen – bitte prüfen (besser: als .docx oder PDF speichern).', 'info');
       await analyse(r.text, { type: r.ocr ? 'ocr' : r.kind === 'docx' || r.kind === 'doc' ? 'docx' : r.kind === 'txt' ? 'txt' : 'pdf', name: file.name });
     } catch (e: any) {
-      toast(e.message || 'Die Datei konnte nicht gelesen werden.', 'fehler');
+      setFileError({ text: e.message || 'Die Datei konnte nicht gelesen werden.' });
       Api.log(String(e.message), 'datei-import');
     } finally { setBusy(null); }
   }
@@ -313,11 +321,16 @@ export function ImportPage() {
               <p className="text-sm">Datei und Ordner „…_files“ gehören zusammen – bitte nicht trennen. Alternativ: <b>Strg + P → „Als PDF speichern“</b>.</p>
             </GuideStep>
             <GuideStep n={3} icon={<Upload size={26} />} title="Lade dein Rezept in Petras Rezepte App" done={!!guide.done[3]} active={firstOpen === 3}
-              action={<button className="btn-ghost btn-sm" onClick={() => { uploadRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); fileRef.current?.click(); }}><FileUp size={16} /> Datei auswählen</button>}>
-              Ziehe die gespeicherte Rezeptdatei in das große Upload-Feld unten – oder klicke auf „Datei auswählen“. Danach auf <b>„Rezept jetzt erkennen“</b>.
+              action={file
+                ? <button className="btn-accent btn-sm" onClick={recognise}><Wand2 size={16} /> Rezept jetzt erkennen</button>
+                : <button className="btn-primary btn-sm" onClick={() => { uploadRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); fileRef.current?.click(); }}><FileUp size={16} /> Datei auswählen</button>}>
+              {file
+                ? <span className="flex items-start gap-2 rounded-xl bg-sage-50 p-2 text-sm text-sage-900"><Check size={16} className="mt-0.5 shrink-0" /><span><b className="break-all">{file.name}</b> ist ausgewählt. Jetzt auf <b>„Rezept jetzt erkennen“</b> klicken.</span></span>
+                : <>Ziehe die gespeicherte Rezeptdatei in das große Upload-Feld unten – oder klicke auf „Datei auswählen“. Danach auf <b>„Rezept jetzt erkennen“</b>.</>}
             </GuideStep>
-            <GuideStep n={4} icon={<ClipboardCheck size={26} />} title="Kontrolliere dein Rezept" done={!!guide.done[4]} active={firstOpen === 4}>
-              Petras Rezepte App erkennt Zutaten, Mengen, Zeiten und Zubereitungsschritte automatisch. Im Rezepteditor kannst du alles prüfen, ändern, ergänzen und speichern.
+            <GuideStep n={4} icon={<ClipboardCheck size={26} />} title="Kontrolliere dein Rezept" done={!!guide.done[4]} active={firstOpen === 4}
+              action={hasDraft && !guide.done[4] ? <button className="btn-primary btn-sm" onClick={() => go('neu')}><ClipboardCheck size={16} /> Erkanntes Rezept prüfen</button> : undefined}>
+              Petras Rezepte App erkennt Zutaten, Mengen, Zeiten und Zubereitungsschritte automatisch und öffnet sie im Rezepteditor. Dort prüfen, ändern, ergänzen – und auf <b>„Speichern“</b> klicken.
             </GuideStep>
             <GuideStep n={5} icon={<Send size={26} />} title="Übertrage dein Rezept nach Cookidoo" done={!!guide.done[5]} active={firstOpen === 5}
               action={<>
@@ -365,6 +378,19 @@ export function ImportPage() {
               <button className="btn-ghost btn-sm" onClick={() => { setFile(null); setExtras([]); }}><Trash2 size={16} /> Andere Datei</button>
             </div>
             <button id="erkennen" className="btn-accent mt-5 w-full py-5 text-xl" onClick={recognise}><Wand2 size={24} /> Rezept jetzt erkennen</button>
+            {fileError && (
+              <div role="alert" className="mt-4 rounded-2xl bg-red-50 p-4 text-red-800">
+                <b className="flex items-center gap-2"><Info size={18} /> Das hat noch nicht geklappt</b>
+                <p className="mt-1">{fileError.text}</p>
+                {fileError.html && (
+                  <button className="btn-ghost btn-sm mt-2 bg-white" onClick={() => {
+                    const doc = new DOMParser().parseFromString(fileError.html!, 'text/html');
+                    doc.querySelectorAll('script,style,noscript,nav,header,footer').forEach((n) => n.remove());
+                    analyse(doc.body?.innerText || doc.body?.textContent || '', { type: 'web', name: file.name });
+                  }}>Trotzdem den Text der Seite verwenden</button>
+                )}
+              </div>
+            )}
             {kindOf(file) === 'image' && <p className="mt-3 flex items-center gap-2 text-sm text-ink-soft"><Info size={15} /> Fotos werden per Texterkennung gelesen – bitte das Ergebnis besonders sorgfältig prüfen.</p>}
           </div>
         )}
