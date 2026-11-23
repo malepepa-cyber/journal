@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { FileDown, BookOpen, Heart, Send, ArrowRight, PencilLine } from 'lucide-react';
-import { CATEGORIES, type RecipeSummary } from '../../../shared/model.ts';
+import { type RecipeSummary } from '../../../shared/model.ts';
 import { Api, type Stats } from '../lib/api.ts';
 import { go } from '../lib/router.ts';
-import { useSession } from '../lib/session.tsx';
-import { RecipeCard, CATEGORY_LOOK } from '../components/recipe-bits.tsx';
+import { useSession, useCategories } from '../lib/session.tsx';
+import { lookOf } from '../components/recipe-bits.tsx';
+import { RecipeCard } from '../components/recipe-bits.tsx';
 import { useToast } from '../components/ui.tsx';
 
 function greeting(): string {
@@ -14,6 +15,7 @@ function greeting(): string {
 
 export function Dashboard() {
   const { session } = useSession();
+  const categories = useCategories();
   const toast = useToast();
   const [stats, setStats] = useState<Stats | null>(null);
   const [recent, setRecent] = useState<RecipeSummary[]>([]);
@@ -90,10 +92,10 @@ export function Dashboard() {
 
       <Section title="Rezeptkategorien">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-          {CATEGORIES.map((c) => (
+          {categories.map((c) => (
             <button key={c} onClick={() => go(`rezepte?kategorie=${encodeURIComponent(c)}`)}
               className="card flex items-center gap-3 p-4 text-left transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-lift)]">
-              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-2xl" style={{ background: `linear-gradient(135deg, ${CATEGORY_LOOK[c].from}, ${CATEGORY_LOOK[c].to})` }}>{CATEGORY_LOOK[c].emoji}</span>
+              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-2xl" style={{ background: `linear-gradient(135deg, ${lookOf(c).from}, ${lookOf(c).to})` }}>{lookOf(c).emoji}</span>
               <span className="min-w-0"><b className="block truncate">{c}</b><span className="text-sm text-ink-soft">{stats?.byCategory[c] ?? 0} Rezepte</span></span>
             </button>
           ))}

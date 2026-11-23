@@ -35,7 +35,7 @@ export const photoUrl = (url: string | null) => (url ? `${url}&t=${encodeURIComp
 
 export interface Settings {
   experimentalTransfer: boolean; cookidooUrl: string; aiEnabled: boolean; aiModel: string;
-  autoBackup: boolean; onboardingDone: boolean; bookmarkletInstalled: boolean;
+  autoBackup: boolean; onboardingDone: boolean; bookmarkletInstalled: boolean; categories: string[];
 }
 export interface Session { version: string; dataDir: string; profileId: number; profiles: Profile[]; settings: Settings; aiKey: boolean }
 export interface Stats { total: number; favorites: number; transferred: number; byCategory: Record<string, number> }
@@ -51,7 +51,7 @@ export const Api = {
   update: (r: Recipe) => api<Recipe>(`/api/recipes/${r.id}`, { method: 'PUT', json: r }),
   remove: (id: number) => api(`/api/recipes/${id}`, { method: 'DELETE' }),
   favorite: (id: number, favorite: boolean) => api(`/api/recipes/${id}/favorite`, { method: 'PATCH', json: { favorite } }),
-  cookidoo: (id: number, status: string) => api<Recipe>(`/api/recipes/${id}/cookidoo`, { method: 'PATCH', json: { status } }),
+  cookidoo: (id: number, status: string | null, progress?: Record<string, boolean>) => api<Recipe>(`/api/recipes/${id}/cookidoo`, { method: 'PATCH', json: { status, progress } }),
   duplicate: (id: number) => api<Recipe>(`/api/recipes/${id}/duplicate`, { method: 'POST' }),
   duplicates: (r: Pick<Recipe, 'id' | 'title' | 'ingredients'>) => api<RecipeSummary[]>('/api/recipes/duplicates', { method: 'POST', json: r }),
   trash: () => api<RecipeSummary[]>('/api/trash'),
@@ -61,8 +61,11 @@ export const Api = {
   saveDraft: (data: unknown) => api('/api/draft', { method: 'PUT', json: data }),
   clearDraft: () => api('/api/draft', { method: 'DELETE' }),
   settings: (patch: Partial<Settings>) => api<Settings>('/api/settings', { method: 'PUT', json: patch }),
+  setCategories: (list: string[]) => api<string[]>('/api/categories', { method: 'PUT', json: { list } }),
+  renameCategory: (from: string, to: string) => api<{ changed: number; categories: string[] }>('/api/categories/rename', { method: 'POST', json: { from, to } }),
   setAiKey: (key: string) => api<{ aiKey: boolean }>('/api/ai/key', { method: 'PUT', json: { key } }),
   aiStructure: (text: string) => api<{ recipe: Recipe; issues: string[] }>('/api/ai/structure', { method: 'POST', json: { text } }),
+  aiReview: (r: Recipe) => api<{ description: string; issues: string[]; steps: { index: number; setting: import('../../../shared/model.ts').TmSetting; reason: string }[] }>('/api/ai/review', { method: 'POST', json: r }),
   backups: () => api<BackupInfo[]>('/api/backups'),
   backup: () => api<BackupInfo>('/api/backups', { method: 'POST' }),
   restoreBackup: (name: string) => api('/api/backups/restore', { method: 'POST', json: { name } }),

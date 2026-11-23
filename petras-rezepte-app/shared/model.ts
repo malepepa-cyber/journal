@@ -11,7 +11,20 @@ export const CATEGORIES = [
   'Hauptgerichte', 'Suppen', 'Salate', 'Kuchen', 'Brot und Brötchen', 'Desserts',
   'Frühstück', 'Beilagen', 'Soßen', 'Getränke', 'Sonstiges',
 ] as const;
-export type Category = (typeof CATEGORIES)[number];
+/** Kategorie: eine der Standardkategorien oder eine eigene (siehe „Kategorien verwalten“). */
+export type Category = string;
+export const MAX_CATEGORIES = 40;
+
+/** Eigene Kategorienliste bereinigen: Text, ohne Doppelte, „Sonstiges“ immer vorhanden. */
+export function cleanCategories(list: unknown): string[] {
+  const out: string[] = [];
+  for (const c of Array.isArray(list) ? list : []) {
+    const name = String(c ?? '').replace(/\s+/g, ' ').trim().slice(0, 40);
+    if (name && !out.some((o) => o.toLowerCase() === name.toLowerCase())) out.push(name);
+  }
+  if (!out.includes('Sonstiges')) out.push('Sonstiges');
+  return out.slice(0, MAX_CATEGORIES);
+}
 
 export const DIFFICULTIES = ['einfach', 'mittel', 'aufwendig'] as const;
 export type Difficulty = (typeof DIFFICULTIES)[number];
@@ -109,7 +122,11 @@ export interface Recipe {
   notes: string;
   favorite: boolean;
   source: { type: SourceType; name: string; url?: string };
-  cookidoo: { status: CookidooStatus; at?: string | null; url?: string | null };
+  cookidoo: {
+    status: CookidooStatus; at?: string | null; url?: string | null;
+    /** Was im Assistenten schon übertragen wurde (z. B. name, description, times, ing:<id>, step:<id>) */
+    progress?: Record<string, boolean>;
+  };
   /** Alternative Schrittfassung (z. B. Originaltext der Seite, wenn die Schritte aus dem Kochmodus stammen) */
   altSteps?: { label: string; steps: Step[] } | null;
   createdAt?: string;

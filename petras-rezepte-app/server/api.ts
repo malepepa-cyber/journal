@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as db from './db.ts';
 import { createBackup, listBackups, restoreBackup } from './backup.ts';
 import { hasApiKey, storeApiKey } from './secrets.ts';
-import { structureWithAi } from './ai.ts';
+import { structureWithAi, reviewWithAi } from './ai.ts';
 import { log } from './log.ts';
 import { APP_VERSION, dataDir } from './paths.ts';
 import { bookmarkletSource } from './bookmarklet.ts';
@@ -93,8 +93,12 @@ route('PATCH', '/api/recipes/:id/favorite', async ({ profileId, params, body }) 
 route('PATCH', '/api/recipes/:id/cookidoo', async ({ profileId, params, body }) => {
   const b = await body();
   const r = db.getRecipe(profileId, id(params));
-  const status = ['offen', 'in Arbeit', 'übertragen'].includes(b.status) ? b.status : 'offen';
-  return db.saveRecipe(profileId, { ...r, cookidoo: { status, at: new Date().toISOString(), url: typeof b.url === 'string' ? b.url.slice(0, 300) : r.cookidoo?.url ?? null } });
+  const status = ['offen', 'in Arbeit', 'übertragen'].includes(b.status) ? b.status : r.cookidoo?.status ?? 'offen';
+  let progress = r.cookidoo?.progress;
+  if (b.progress && typeof b.progress === 'object') {
+    progress = Object.fromEntries(Object.entries(b.progress).filter(([k, v]) => /^[\w:.-]{1,80}$/.test(k) && v === true).slice(0, 700)) as Record<string, boolean>;
+  }
+  return db.saveRecipe(profileId, { ...r, cookidoo: { status, at: new Date().toISOString(), url: typeof b.url === 'string' ? b.url.slice(0, 300) : r.cookidoo?.url ?? null, progress } });
 });
 route('POST', '/api/recipes/:id/duplicate', ({ profileId, params }) => db.duplicateRecipe(profileId, id(params)));
 route('DELETE', '/api/recipes/:id', ({ profileId, params }) => { db.deleteRecipe(profileId, id(params)); return { ok: true }; });
@@ -133,6 +137,13 @@ route('DELETE', '/api/draft', ({ profileId }) => { db.clearDraft(profileId); ret
 
 // ---------- Einstellungen ----------
 route('PUT', '/api/settings', async ({ profileId, body }) => db.updateSettings(profileId, await body()));
+route('PUT', '/api/categories', async ({ profileId, body }) => db.updateSettings(profileId, { categories: (await body()).list }).categories);
+route('POST', '/api/categories/rename', async ({ profileId, body }) => {
+  const b = await body();
+  const from = String(b.from ?? ''); const to = String(b.to ?? '');
+  if (!from) throw new HttpError(400, 'Welche Kategorie?');
+  return { changed: db.renameCategory(profileId, from, to), categories: db.getSettings(profileId).categories };
+});
 route('PUT', '/api/ai/key', async ({ body }) => {
   const k = String((await body()).key ?? '').trim();
   if (k && !/^sk-ant-[\w-]{20,}$/.test(k)) throw new HttpError(400, 'Das sieht nicht wie ein Claude-API-Schlüssel aus (beginnt mit „sk-ant-“).');
@@ -143,6 +154,12 @@ route('POST', '/api/ai/structure', async ({ profileId, body }) => {
   const s = db.getSettings(profileId);
   if (!s.aiEnabled) throw new HttpError(400, 'Die KI-Unterstützung ist ausgeschaltet.');
   return structureWithAi(String((await body()).text ?? ''), s.aiModel);
+});
+
+route('POST', '/api/ai/review', async ({ profileId, body }) => {
+  const s = db.getSettings(profileId);
+  if (!s.aiEnabled) throw new HttpError(400, 'Die KI-Unterstützung ist ausgeschaltet.');
+  return reviewWithAi(db.sanitizeRecipe(await body() as Recipe, profileId), s.aiModel);
 });
 
 // ---------- Sicherungen ----------

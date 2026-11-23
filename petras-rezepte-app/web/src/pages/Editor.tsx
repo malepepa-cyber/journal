@@ -4,7 +4,7 @@ import {
   ImagePlus, AlertTriangle, Sparkles, Hourglass, ListPlus, CheckCheck, Info, Type,
 } from 'lucide-react';
 import {
-  ACCESSORIES, CATEGORIES, DIFFICULTIES, emptyRecipe,
+  ACCESSORIES, DIFFICULTIES, emptyRecipe,
   type Accessory, type Ingredient, type Recipe, type Step, type TmSetting,
 } from '../../../shared/model.ts';
 import { findSettings, findRestMinutes, insertSetting, replaceSetting } from '../../../shared/tm.ts';
@@ -14,6 +14,8 @@ import { validateRecipe } from '../../../shared/validate.ts';
 import { Api, downloadExport } from '../lib/api.ts';
 import { resizePhoto } from '../lib/importers.ts';
 import { go } from '../lib/router.ts';
+import { useCategories, useSession } from '../lib/session.tsx';
+import { markGuide } from './ImportPage.tsx';
 import { RecipeVisual, TmPill, CookidooBadge, fmtMin } from '../components/recipe-bits.tsx';
 import { SettingEditor } from '../components/SettingEditor.tsx';
 import { Empty, ProgressOverlay, useConfirm, useToast } from '../components/ui.tsx';
@@ -37,6 +39,7 @@ function AutoText({ value, onChange, className, placeholder, onKeyDown, taRef }:
 }
 
 export function Editor({ id }: { id: number | null }) {
+  const categories = useCategories();
   const toast = useToast();
   const confirm = useConfirm();
   const [r, setR] = useState<Recipe | null>(null);
@@ -50,6 +53,10 @@ export function Editor({ id }: { id: number | null }) {
   const [ingText, setIngText] = useState<string | null>(null);
   const [restoreOffer, setRestoreOffer] = useState<Recipe | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const { session } = useSession();
+  const aiAvailable = !!session?.settings.aiEnabled && !!session?.aiKey;
+  const [aiDesc, setAiDesc] = useState<string | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
   const stepRefs = useRef<(HTMLTextAreaElement | null)[]>([]);
   const photoRef = useRef<HTMLInputElement>(null);
 
@@ -124,9 +131,29 @@ export function Editor({ id }: { id: number | null }) {
       await Api.clearDraft().catch(() => {});
       setR(saved); setDirty(false); setSavedAt(saved.updatedAt ?? null); setDraftAt(null);
       toast('Rezept gespeichert');
+      markGuide(4);
       if (!id && saved.id) { history.replaceState(null, '', `#/rezept/${saved.id}`); window.dispatchEvent(new HashChangeEvent('hashchange')); }
       return saved;
     } catch (e: any) { toast(e.message, 'fehler'); return null; } finally { setBusy(false); }
+  }
+
+  // ---------- Optionale KI-Prüfung (nur Vorschläge, nichts wird ungefragt geändert) ----------
+  async function aiReview() {
+    if (!r) return;
+    setAiBusy(true);
+    try {
+      const res = await Api.aiReview(r);
+      setNotes(res.issues);
+      setShowIssues(true);
+      if (res.description && res.description.trim() !== r.description.trim()) setAiDesc(res.description);
+      if (res.steps.length) update((o) => ({
+        ...o, steps: o.steps.map((st, i) => {
+          const sug = res.steps.find((x) => x.index === i + 1);
+          return sug ? { ...st, suggestions: [{ setting: sug.setting, reason: sug.reason, source: 'ki' as const }, ...st.suggestions.filter((x) => x.source !== 'ki')] } : st;
+        }),
+      }));
+      toast(`KI-Prüfung fertig: ${res.issues.length} Hinweis${res.issues.length === 1 ? '' : 'e'}, ${res.steps.length} Vorschl${res.steps.length === 1 ? 'ag' : 'äge'}.`);
+    } catch (e: any) { toast(e.message, 'fehler'); } finally { setAiBusy(false); }
   }
 
   async function discard() {
@@ -223,7 +250,7 @@ export function Editor({ id }: { id: number | null }) {
       )}
 
       {/* Prüfhinweise */}
-      {(!id || issues.length > 0 || notes.length > 0) && (
+      {(!id || issues.length > 0 || notes.length > 0 || aiAvailable) && (
         <div className="card mb-6 border-sage-300 bg-sage-50/60 p-5">
           <div className="flex flex-wrap items-center gap-3">
             <Info className="text-sage-700" />
@@ -241,8 +268,17 @@ export function Editor({ id }: { id: number | null }) {
                 altSteps: { label: /Original/.test(o.altSteps!.label) ? 'Schritte aus dem Kochmodus' : 'Originaltext der Seite', steps: o.steps },
               }))}>⇄ {/Original/.test(r.altSteps.label) ? 'Originaltext verwenden' : 'Kochmodus-Schritte verwenden'}</button>
             )}
+            {aiAvailable && <button className="btn-soft btn-sm" disabled={aiBusy} onClick={aiReview} title="Beschreibung aufbereiten, Unstimmigkeiten finden, Thermomix-Einstellungen vorschlagen"><Sparkles size={16} /> {aiBusy ? 'KI prüft …' : 'Mit KI prüfen'}</button>}
             {(issues.length > 0 || notes.length > 0) && <button className="btn-soft btn-sm" onClick={() => setShowIssues(!showIssues)}>{showIssues ? 'Ausblenden' : 'Anzeigen'}</button>}
           </div>
+          {aiDesc && (
+            <div className="mt-3 ml-9 rounded-2xl bg-white/70 p-3 text-sm">
+              <b className="flex items-center gap-1"><Sparkles size={15} className="text-apricot-500" /> Vorschlag für die Beschreibung</b>
+              <p className="my-1">{aiDesc}</p>
+              <button className="btn-primary btn-sm" onClick={() => { set('description', aiDesc); setAiDesc(null); }}>Übernehmen</button>
+              <button className="btn-ghost btn-sm" onClick={() => setAiDesc(null)}>Verwerfen</button>
+            </div>
+          )}
           {showIssues && (
             <ul className="mt-3 space-y-1 pl-9 text-sm">
               {notes.map((n) => <li key={n} className="flex gap-2"><Sparkles size={15} className="mt-0.5 shrink-0 text-apricot-500" />KI: {n}</li>)}
@@ -270,7 +306,7 @@ export function Editor({ id }: { id: number | null }) {
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block"><span className="label">Kategorie</span>
                 <select className="input" value={r.category} onChange={(e) => set('category', e.target.value as Recipe['category'])}>
-                  {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+                  {(categories.includes(r.category) ? categories : [...categories, r.category]).map((c) => <option key={c}>{c}</option>)}
                 </select></label>
               <div><span className="label">Schwierigkeit</span>
                 <div className="flex gap-1.5">{DIFFICULTIES.map((d) => (

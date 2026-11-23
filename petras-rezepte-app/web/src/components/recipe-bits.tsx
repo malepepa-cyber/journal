@@ -5,7 +5,7 @@ import { photoUrl } from '../lib/api.ts';
 import { go } from '../lib/router.ts';
 
 /** Bildmotiv je Kategorie (wenn kein eigenes Foto vorhanden ist) */
-export const CATEGORY_LOOK: Record<Category, { emoji: string; from: string; to: string }> = {
+export const CATEGORY_LOOK: Record<string, { emoji: string; from: string; to: string }> = {
   Hauptgerichte: { emoji: '🍲', from: '#F6D9C3', to: '#E9A77C' },
   Suppen: { emoji: '🥣', from: '#FBE7C4', to: '#EDB86A' },
   Salate: { emoji: '🥗', from: '#DDEBCF', to: '#9EC383' },
@@ -19,8 +19,11 @@ export const CATEGORY_LOOK: Record<Category, { emoji: string; from: string; to: 
   Sonstiges: { emoji: '🍽️', from: '#E9E5DB', to: '#BDB5A3' },
 };
 
+/** Aussehen einer Kategorie – eigene Kategorien bekommen ein neutrales Aussehen */
+export const lookOf = (c: Category) => CATEGORY_LOOK[c] ?? CATEGORY_LOOK.Sonstiges;
+
 export function RecipeVisual({ category, photo, className = '' }: { category: Category; photo: string | null; className?: string }) {
-  const look = CATEGORY_LOOK[category] ?? CATEGORY_LOOK.Sonstiges;
+  const look = lookOf(category);
   const src = photo?.startsWith('data:') ? photo : photoUrl(photo);
   if (src) return <img src={src} alt="" className={`object-cover ${className}`} loading="lazy" />;
   return (

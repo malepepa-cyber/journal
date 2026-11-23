@@ -33,6 +33,16 @@ export function validateRecipe(r: Recipe): Issue[] {
     }
     if (s.suggestions.length) out.push({ level: 'hinweis', where: 'schritt', index, message: `Schritt ${index + 1}: Vorschlag noch nicht bestätigt` });
   });
+  // Unstimmigkeit: Zutat steht in der Liste, kommt aber in keinem Schritt vor (ohne KI, rein regelbasiert)
+  const stepText = r.steps.map((s) => `${s.text} ${(s.ingredients ?? []).join(' ')}`).join(' ').toLowerCase();
+  if (stepText.trim() && !/alle zutaten|übrigen zutaten|restlichen zutaten/.test(stepText)) {
+    r.ingredients.forEach((i, index) => {
+      const words = i.name.toLowerCase().split(/[^a-zäöüß]+/).filter((w) => w.length >= 4);
+      if (!words.length || /^(salz|pfeffer|wasser)$/.test(words[0])) return;
+      const stem = (w: string) => w.slice(0, Math.max(4, w.length - 3));
+      if (!words.some((w) => stepText.includes(stem(w)))) out.push({ level: 'hinweis', where: 'zutat', index, message: `${i.name}: wird in keinem Schritt erwähnt` });
+    });
+  }
   return out;
 }
 

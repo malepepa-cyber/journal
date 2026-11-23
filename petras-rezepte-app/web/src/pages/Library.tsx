@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Search, Heart, BookOpen, FileDown, LayoutGrid, List } from 'lucide-react';
-import { CATEGORIES, type RecipeSummary } from '../../../shared/model.ts';
+import { Search, Heart, BookOpen, FileDown, LayoutGrid, List, Tags } from 'lucide-react';
+import { CategoryManager } from '../components/CategoryManager.tsx';
+import { useCategories } from '../lib/session.tsx';
+import { type RecipeSummary } from '../../../shared/model.ts';
 import { Api } from '../lib/api.ts';
 import { go, useQuery } from '../lib/router.ts';
 import { RecipeCard, RecipeVisual, CookidooBadge, fmtMin } from '../components/recipe-bits.tsx';
@@ -13,6 +15,9 @@ export function Library({ mode }: { mode: 'alle' | 'favoriten' }) {
   const [q, setQ] = useState('');
   const [cat, setCat] = useState(query.get('kategorie') ?? '');
   const [sort, setSort] = useState<'neu' | 'name' | 'geändert'>('neu');
+  const categories = useCategories();
+  const [manage, setManage] = useState(false);
+  const [tick, setTick] = useState(0);
   const [view, setView] = useState<'karten' | 'liste'>(() => (localStorage.getItem('pra.view') as 'karten' | 'liste') || 'karten');
 
   useEffect(() => { setCat(query.get('kategorie') ?? ''); }, [query]);
@@ -21,7 +26,7 @@ export function Library({ mode }: { mode: 'alle' | 'favoriten' }) {
       Api.list({ q, category: cat, sort, favorite: mode === 'favoriten' ? 1 : undefined }).then(setList).catch((e) => toast(e.message, 'fehler'));
     }, 150);
     return () => clearTimeout(t);
-  }, [q, cat, sort, mode]);
+  }, [q, cat, sort, mode, tick]);
 
   const fav = async (r: RecipeSummary) => {
     await Api.favorite(r.id, !r.favorite);
@@ -51,11 +56,13 @@ export function Library({ mode }: { mode: 'alle' | 'favoriten' }) {
       </div>
 
       <div className="mb-6 flex flex-wrap gap-2">
-        {['', ...CATEGORIES].map((c) => (
+        {['', ...categories].map((c) => (
           <button key={c || 'alle'} onClick={() => setCat(c)}
             className={`chip px-4 py-2 transition ${cat === c ? 'bg-sage-600 text-white' : 'bg-cream-50 text-ink ring-1 ring-cream-300 hover:ring-sage-300'}`}>{c || 'Alle'}</button>
         ))}
+        <button onClick={() => setManage(true)} className="chip px-4 py-2 text-sage-700 border border-dashed border-sage-400 hover:bg-cream-100"><Tags size={16} /> Kategorien verwalten</button>
       </div>
+      <CategoryManager open={manage} onClose={() => setManage(false)} onChanged={() => setTick((t) => t + 1)} />
 
       {list && list.length === 0 ? (
         mode === 'favoriten' && !q && !cat

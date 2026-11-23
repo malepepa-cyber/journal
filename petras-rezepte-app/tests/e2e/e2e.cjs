@@ -102,11 +102,39 @@ const SCAN = `<body style="font:22px Georgia,serif;padding:40px;background:#fbfa
     await check('Assistent: alle Schritte bis „übertragen“', async () => {
       await p.goto(`${B}/#/cookidoo`); await p.click('text=Vanillepudding');
       await p.click('text=Cookidoo ist schon offen');
-      for (let i = 0; i < 3; i++) await p.click('button:has-text("Weiter")');
+      await p.click('button:has-text("Kopieren") >> nth=0'); // Name kopieren → abgehakt
+      await p.waitForSelector('text=/Übertragen: 1 von/');
+      await p.click('button:has-text("Weiter")');
+      await p.click('button[aria-label^="Portionen & Zeiten"]');
+      await p.click('button:has-text("Weiter")');
+      await p.click('button:has-text("Alle Zutaten kopieren")');
+      await p.waitForSelector('text=/Übertragen: 6 von 9/');
+      await p.click('button:has-text("Weiter")');
       for (let i = 0; i < 2; i++) await p.click('button:has-text("Nächster Schritt")');
       await p.click('button:has-text("Alle Schritte erledigt")');
+      await p.waitForSelector('text=Fast geschafft');
+      assert.equal(await p.locator('text=Noch nicht abgehakt').count(), 0, 'alles abgehakt');
+      // Fortschritt bleibt gespeichert
+      await p.reload(); await p.click('text=Cookidoo ist schon offen');
+      await p.waitForSelector('text=/Übertragen: 9 von 9 \\(100 %\\)/');
+      await p.click('ol button:has-text("Fertig")');
       await p.click('button:has-text("Als übertragen markieren")');
       await p.waitForSelector('text=Als „In Cookidoo“ markiert');
+    });
+    await check('Kategorien verwalten: anlegen, umbenennen, entfernen', async () => {
+      await p.goto(`${B}/#/rezepte`); await p.click('button:has-text("Kategorien verwalten")');
+      await p.fill('input[aria-label="Neue Kategorie"]', 'Weihnachten'); await p.click('button:has-text("Hinzufügen")');
+      await p.waitForSelector('dialog li:has-text("Weihnachten")');
+      await p.click('button[aria-label="Weihnachten umbenennen"]'); await p.fill('input[aria-label="Neuer Name"]', 'Plätzchen'); await p.keyboard.press('Enter');
+      await p.waitForSelector('dialog li:has-text("Plätzchen")');
+      await p.click('button:has-text("Fertig")');
+      assert.equal(await p.locator('button.chip:has-text("Plätzchen")').count(), 1, 'Chip in der Bibliothek');
+      await p.goto(`${B}/#/rezepte`); await p.click('article >> text=Vanillepudding');
+      await p.selectOption('select:near(:text("Kategorie"))', 'Plätzchen');
+      await p.click('button:has-text("Speichern") >> nth=0'); await p.waitForSelector('text=Rezept gespeichert');
+      await p.goto(`${B}/#/rezepte`); await p.click('button:has-text("Kategorien verwalten")');
+      await p.click('button[aria-label="Plätzchen entfernen"]'); await p.click('dialog button:has-text("Entfernen")');
+      await p.waitForSelector('text=/1 Rezept jetzt unter „Sonstiges“/');
     });
     await check('Keine Fehler in der Browser-Konsole', async () => assert.deepEqual(errs, []));
   } finally {

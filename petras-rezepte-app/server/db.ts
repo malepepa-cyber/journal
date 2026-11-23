@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { dataDir } from './paths.ts';
 import { log } from './log.ts';
 import { fingerprint } from '../shared/validate.ts';
-import { CATEGORIES, type Category, type Profile, type Recipe, type RecipeSummary } from '../shared/model.ts';
+import { CATEGORIES, cleanCategories, type Category, type Profile, type Recipe, type RecipeSummary } from '../shared/model.ts';
 
 let db: DatabaseSync | null = null;
 
@@ -130,7 +130,7 @@ export function sanitizeRecipe(input: Recipe, profileId: number): Recipe {
   const r: Recipe = JSON.parse(JSON.stringify(input));
   r.title = String(r.title ?? '').trim().slice(0, 200);
   if (!r.title) throw Object.assign(new Error('Das Rezept braucht einen Namen.'), { status: 400 });
-  if (!CATEGORIES.includes(r.category)) r.category = 'Sonstiges';
+  r.category = String(r.category ?? '').replace(/\s+/g, ' ').trim().slice(0, 40) || 'Sonstiges';
   r.profileId = profileId;
   r.ingredients = Array.isArray(r.ingredients) ? r.ingredients.slice(0, 300) : [];
   r.steps = Array.isArray(r.steps) ? r.steps.slice(0, 300) : [];
@@ -267,6 +267,8 @@ export interface Settings {
   autoBackup: boolean;
   onboardingDone: boolean;
   bookmarkletInstalled: boolean;
+  /** Reihenfolge und Namen der Kategorien (Standard + eigene) */
+  categories: string[];
 }
 export const DEFAULT_SETTINGS: Settings = {
   experimentalTransfer: false,
@@ -276,6 +278,7 @@ export const DEFAULT_SETTINGS: Settings = {
   autoBackup: true,
   onboardingDone: false,
   bookmarkletInstalled: false,
+  categories: [...CATEGORIES],
 };
 
 export function getSettings(profileId: number): Settings {
@@ -287,9 +290,10 @@ export function getSettings(profileId: number): Settings {
 
 export function updateSettings(profileId: number, patch: Partial<Settings>): Settings {
   const d = openDb();
-  for (const [k, v] of Object.entries(patch)) {
+  for (let [k, v] of Object.entries(patch)) {
     if (!(k in DEFAULT_SETTINGS) || typeof v !== typeof DEFAULT_SETTINGS[k as keyof Settings]) continue;
     if (k === 'cookidooUrl' && !/^https:\/\/cookidoo\.[a-z.]+\//i.test(String(v))) continue;
+    if (k === 'categories') v = cleanCategories(v);
     d.prepare('INSERT INTO settings (profile_id, key, value) VALUES (?, ?, ?) ON CONFLICT(profile_id, key) DO UPDATE SET value = excluded.value')
       .run(profileId, k, JSON.stringify(v));
   }
@@ -301,4 +305,20 @@ export function getSecret(key: string): string | null { return getMeta(`secret:$
 export function setSecret(key: string, value: string | null): void {
   if (value == null) openDb().prepare('DELETE FROM meta WHERE key = ?').run(`secret:${key}`);
   else setMeta(`secret:${key}`, value);
+}
+
+// ---------------- Kategorien ----------------
+/** Kategorie umbenennen (oder mit to = 'Sonstiges' auflösen): alle Rezepte werden angepasst. */
+export function renameCategory(profileId: number, from: string, to: string): number {
+  const target = to.replace(/\s+/g, ' ').trim().slice(0, 40) || 'Sonstiges';
+  const rows = openDb().prepare('SELECT id FROM recipes WHERE profile_id = ? AND category = ?').all(profileId, from) as { id: number }[];
+  for (const { id } of rows) {
+    const row = rowById(profileId, Number(id), true);
+    const data = { ...JSON.parse(String(row.data)), category: target };
+    openDb().prepare('UPDATE recipes SET category = ?, data = ?, updated_at = ? WHERE id = ?').run(target, JSON.stringify(data), now(), id);
+  }
+  const s = getSettings(profileId);
+  const list = s.categories.map((c) => (c === from ? target : c));
+  updateSettings(profileId, { categories: list });
+  return rows.length;
 }

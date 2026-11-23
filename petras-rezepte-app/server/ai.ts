@@ -115,3 +115,52 @@ export async function structureWithAi(text: string, model = DEFAULT_AI_MODEL): P
   r.restTime = rest || null;
   return { recipe: r, issues: out.issues };
 }
+
+// ---------------- Rezept prüfen (im Editor) ----------------
+const ReviewSchema = z.object({
+  description: z.string().describe('kurze, appetitliche Beschreibung (1–3 Sätze), nur aus Informationen des Rezepts'),
+  issues: z.array(z.string()).describe('fehlende, widersprüchliche oder unplausible Angaben, kurz auf Deutsch'),
+  steps: z.array(z.object({
+    index: z.number().describe('Nummer des Schritts, beginnend bei 1'),
+    suggestion: SettingSchema,
+  })).describe('NUR für Mixtopf-Schritte OHNE Thermomix-Angabe'),
+});
+
+const REVIEW_SYSTEM = `Du prüfst ein Thermomix-TM6-Rezept. Antworte ausschließlich im vorgegebenen JSON-Format, auf Deutsch.
+- Formuliere eine kurze Beschreibung ohne neue Fakten zu erfinden.
+- Finde fehlende Mengen, Zutaten, die in Schritten vorkommen aber nicht in der Zutatenliste stehen (und umgekehrt), unplausible Zeiten/Temperaturen/Stufen.
+- Schlage Thermomix-Einstellungen nur für Schritte vor, die im Mixtopf stattfinden und keine Angabe haben (max. 120 °C manuell, Stufe 0,5–10). Diese sind Vorschläge und werden nicht automatisch übernommen.`;
+
+export interface AiReview { description: string; issues: string[]; steps: { index: number; setting: TmSetting; reason: string }[] }
+
+export async function reviewWithAi(recipe: Recipe, model = DEFAULT_AI_MODEL): Promise<AiReview> {
+  const apiKey = readApiKey();
+  if (!apiKey) throw Object.assign(new AiError('Kein KI-Schlüssel hinterlegt (Einstellungen → KI).'), { status: 400 });
+  const text = [
+    `Titel: ${recipe.title}`, recipe.description && `Beschreibung: ${recipe.description}`,
+    recipe.servings ? `Portionen: ${recipe.servings}` : '',
+    'Zutaten:', ...recipe.ingredients.map((i) => `- ${[i.group && `[${i.group}]`, i.amount ?? '', i.unit, i.name, i.note && `(${i.note})`].filter(Boolean).join(' ')}`),
+    'Schritte:', ...recipe.steps.map((s, i) => `${i + 1}. ${s.text}`),
+  ].filter(Boolean).join('\n').slice(0, 60_000);
+  const client = new Anthropic({ apiKey, maxRetries: 2, timeout: 120_000 });
+  let response;
+  try {
+    response = await client.beta.messages.parse({
+      model, max_tokens: 8000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
+      system: REVIEW_SYSTEM, messages: [{ role: 'user', content: text }],
+      output_config: { format: zodOutputFormat(ReviewSchema) },
+    });
+  } catch (e) {
+    if (e instanceof Anthropic.AuthenticationError) throw new AiError('Der KI-Schlüssel ist ungültig.');
+    if (e instanceof Anthropic.APIConnectionError) throw new AiError('Keine Internetverbindung zur KI.');
+    if (e instanceof Anthropic.APIError) throw new AiError(`KI-Fehler (${e.status ?? '?'})`);
+    throw e;
+  }
+  const out = response.parsed_output;
+  if (response.stop_reason === 'refusal' || !out) throw new AiError('Die KI-Antwort war unvollständig.');
+  return {
+    description: out.description, issues: out.issues,
+    steps: out.steps.filter((s) => s.index >= 1 && s.index <= recipe.steps.length && !findSettings(recipe.steps[s.index - 1].text).length)
+      .map((s) => ({ index: s.index, setting: toSetting(s.suggestion), reason: s.suggestion.reason })),
+  };
+}
