@@ -4,7 +4,25 @@ Rezepte aus dem **Zaubertopf Club**, aus **PDFs**, **Word-Dateien**, **Fotos** o
 **Thermomix TM6** aufbereiten, in einer eigenen Rezeptbibliothek verwalten und mit einem geführten
 Assistenten in **Cookidoo → Meine Kreationen** übertragen.
 
-Windows-Anwendung · läuft im Google-Chrome-Fenster · alle Daten bleiben lokal · © Patrick S.
+Windows-Anwendung · läuft im Google-Chrome-Fenster · funktioniert offline · optional synchronisiert zwischen PC und
+Notebook · © Patrick S.
+
+## Neu in Version 2.0
+* **Rezeptdatei hochladen** als Hauptweg: Zaubertopf-Club-Seite mit **Strg + S** speichern und hochladen – HTML, PDF,
+  Word (.docx/.doc), TXT oder Bild (JPG/PNG, Texterkennung). Das Rezeptbild wird mit übernommen.
+* **5-Schritte-Anleitung** direkt auf der Importseite (Zaubertopf Club öffnen → speichern → hochladen → prüfen →
+  nach Cookidoo), mit Häkchen für erledigte Schritte.
+* **Synchronisierung PC ↔ Notebook** (kostenlos über ein eigenes Firebase-Projekt): Rezepte, Bilder, Kategorien,
+  Favoriten, Notizen, Löschungen; offline weiterarbeiten; gleichzeitige Änderungen gehen nie verloren
+  (Konflikt-Kopie); **Versionsverlauf** je Rezept; Geräteverwaltung.
+* **Cookidoo-Assistent** mit Fortschritt je Feld („was ist übertragen, was fehlt“), „Alle Schritte kopieren“ und
+  **„Cookidoo nebenan öffnen“** (beide Fenster nebeneinander, kein Fenstersuchen).
+* **Kategorien verwalten** (eigene Kategorien, umbenennen, sortieren), Prüfung auf Zutaten, die in keinem Schritt
+  vorkommen, optionale **KI-Prüfung** im Editor (Beschreibung, Unstimmigkeiten, TM-Vorschläge – nur als Vorschlag).
+
+**Anleitungen:** [Installation](docs/INSTALLATION.md) · [Synchronisierung einrichten](docs/SYNC-ANLEITUNG.md) ·
+[Zweites Gerät](docs/ZWEITES-GERAET.md) · [Kosten](docs/KOSTEN.md) · [Architektur](docs/ARCHITEKTUR.md) ·
+[Testprotokoll](docs/TESTS.md)
 
 ![Dashboard](docs/bilder/1-dashboard.png)
 
@@ -13,7 +31,7 @@ Windows-Anwendung · läuft im Google-Chrome-Fenster · alle Daten bleiben lokal
 ## Für Petra: Installation & Bedienung
 
 ### Installieren
-1. `PetrasRezepteApp-Setup-1.0.0.exe` doppelt anklicken.
+1. `PetrasRezepteApp-Setup-2.0.0.exe` doppelt anklicken (Download: Ordner `download/`).
 2. Falls Windows „Der Computer wurde durch Windows geschützt“ meldet: **Weitere Informationen → Trotzdem ausführen**
    (die Datei ist nicht digital signiert – siehe unten).
 3. „Weiter“ → Lizenz bestätigen → **Fertig**. Es sind **keine Administratorrechte** nötig.
@@ -24,7 +42,7 @@ Die App öffnet sich als eigenes Fenster in **Google Chrome** (falls Chrome fehl
 ### Ein Rezept übernehmen
 | | |
 |---|---|
-| **1. Importieren** | „Rezept importieren“ → Text aus dem Zaubertopf Club einfügen **oder** PDF hineinziehen. PDF erzeugen: im Browser **Strg + P → „Als PDF speichern“**. Auch Word (.docx), TXT und Fotos/Scans (Texterkennung) gehen. |
+| **1. Importieren** | „Rezept importieren“ → **„Öffne den Zaubertopf Club“** → Rezept öffnen → **Strg + S** („Webseite, vollständig“) → die gespeicherte Datei (oder ganzen Ordner) in die App ziehen → **„Rezept jetzt erkennen“**. Ebenso: PDF, Word (.docx/.doc), TXT, Fotos/Scans (Texterkennung). Alternativ Link oder Text einfügen. |
 | **2. Prüfen** | Die App erkennt Name, Portionen, Zeiten, Zutaten (Menge · Einheit · Zutat), Schritte und Thermomix-Einstellungen. **Grüne Knöpfe** stehen so im Rezept. **Gestrichelte Knöpfe** sind *Vorschläge* der App – sie gelten erst nach „Übernehmen“. Ein Klick auf einen Knopf öffnet die Einstellung zum Ändern (Zeit, Temperatur, Stufe, Linkslauf, Teig, Anbraten, Turbo, Varoma). |
 | **3. Speichern** | Das Rezept landet in „Meine Rezepte“. Alles wird zusätzlich **automatisch zwischengespeichert**. |
 | **4. Cookidoo** | „Speichern & zu Cookidoo“ → **Ausfüllhilfe starten** (empfohlen, siehe unten) – oder der Schritt-für-Schritt-Assistent mit **Kopieren**-Knöpfen und großen Thermomix-Werten. |
@@ -65,6 +83,13 @@ Das Lesezeichen **„➜ Petras Rezepte“** füllt den Cookidoo-Editor über de
 ### Noch schneller: Lesezeichen „➜ Petras Rezepte“
 Einstellungen → Cookidoo → den grünen Knopf in die Lesezeichenleiste ziehen (Leiste einblenden: **Strg + Umschalt + B**).
 Auf einer Rezeptseite anklicken → in der App **„Aus Zwischenablage einfügen“**.
+
+### PC und Notebook synchron halten (neu in 2.0)
+Einmalig ein kostenloses Firebase-Projekt anlegen ([Anleitung](docs/SYNC-ANLEITUNG.md), ca. 10 Minuten, **keine
+Zahlungsart nötig**), in der App unter **Einstellungen → Geräte und Synchronisierung** eintragen und ein Konto
+erstellen. Am Notebook den **Verbindungscode** eingeben und mit demselben Konto anmelden ([Anleitung](docs/ZWEITES-GERAET.md)).
+Links unten zeigt die App den Status: *Synchronisiert* · *Synchronisierung läuft* · *Offline – Änderungen lokal
+gespeichert* · *Synchronisierung fehlgeschlagen* – mit **„Jetzt synchronisieren“**.
 
 ### Daten, Sicherung, Update, Deinstallation
 * Rezepte liegen in `%APPDATA%\Petras Rezepte App` (Datenbank `rezepte.db`).
@@ -117,7 +142,9 @@ Warum diese Lösung (statt Electron/Tauri/PWA): siehe [docs/MACHBARKEIT.md](docs
 | Ordner | Inhalt |
 |---|---|
 | `shared/` | Datenmodell, Parser, TM-Einstellungen (`tm.ts`), Zutaten, Vorschläge, Validierung, Cookidoo-Format, PDF-Zeilen, Seitenleser (`sites/`: ZauberTopf Club, allgemein) |
-| `server/` | lokaler Dienst: `main.ts`, `api.ts`, `db.ts`, `backup.ts`, `security.ts`, `secrets.ts`, `ai.ts`, `launcher.ts` |
+| `server/` | lokaler Dienst: `main.ts`, `api.ts`, `db.ts`, `backup.ts`, `security.ts`, `secrets.ts`, `ai.ts`, `launcher.ts`, `fetch-url.ts` |
+| `server/sync/` | Synchronisierung: `firebase.ts` (REST-Client Auth/Firestore), `engine.ts` (Abgleich, Konflikte, Geräte) |
+| `firebase/` | Sicherheitsregeln `firestore.rules`, Emulator-Konfiguration für Tests |
 | `web/` | Oberfläche (Vite, React 19, Tailwind 4) – Seiten in `web/src/pages` |
 | `helper/` | Lesezeichen (wird zu `web/dist/helper/bookmarklet.js` gebaut) |
 | `build/` | Build-Skripte, NSIS-Installer, Symbol, Lizenzsammlung |
@@ -130,7 +157,9 @@ npm install
 npm run build          # Oberfläche + Lesezeichen + Dienst → dist/
 npm start              # Dienst starten (öffnet Chrome); --no-browser zum Testen
 npm run dev            # Entwicklung: Dienst (Port 47123) + Vite (Port 5173)
-npm test               # 36 Unit-/Integrationstests
+npm test               # 42 Unit-/Integrationstests
+npm run test:sync      # Synchronisierung: 10 Szenarien gegen Firebase-Emulatoren (Java 21; kein Konto, keine Kosten)
+node build/sync-test.mjs --ui   # Synchronisierung in der Oberfläche (zwei Geräte)
 node tests/e2e/link-import.cjs  # E2E: Link einfügen, Lesezeichen, gespeicherte Seiten
 node tests/e2e/cookidoo-fill.cjs # E2E: Ausfüllhilfe gegen nachgebauten Cookidoo-Editor
 npm run test:e2e       # Browser-Ende-zu-Ende-Test (Playwright, benötigt Chromium)
@@ -138,7 +167,8 @@ npm run typecheck
 npm run dist:win       # Windows-EXE + Installer → release/  (benötigt makensis, unzip)
 npx tsx build/make-samples.ts   # Beispielrezepte/-datenbank neu erzeugen
 ```
-Umgebungsvariablen für Tests: `PRA_DATA_DIR`, `PRA_PORT`, `PRA_TOKEN`, `PRA_NO_BROWSER`, `PRA_IDLE_MINUTES`.
+Umgebungsvariablen für Tests: `PRA_DATA_DIR`, `PRA_PORT`, `PRA_TOKEN`, `PRA_NO_BROWSER`, `PRA_IDLE_MINUTES`,
+`PRA_ALLOW_EMULATOR=1` (nur Tests: Firebase-Emulatoren erlauben). Ausführliche Architektur: [docs/ARCHITEKTUR.md](docs/ARCHITEKTUR.md).
 
 ### Qualität & Sicherheit
 * Eingabeprüfung im Dienst (Größenlimits, Typen, erlaubte Cookidoo-Adressen), verständliche Fehlermeldungen.
@@ -148,15 +178,13 @@ Umgebungsvariablen für Tests: `PRA_DATA_DIR`, `PRA_PORT`, `PRA_TOKEN`, `PRA_NO_
 * Mehrere Profile mit getrennten Rezepten und Einstellungen; keine fest eingebauten Zugangsdaten.
 
 ### Stand der Tests
-* ✅ 28 Unit-/Integrationstests (Parser, Zutaten, TM-Einstellungen, Vorschläge, 6 Testrezepte, Dienst inkl. Sicherheit,
-  Sicherung/Wiederherstellung, Verschlüsselung, Protokoll).
-* ✅ E2E im Browser – auch gegen die **gepackte** Single-Executable: mehrseitige PDF mit Kopf-/Fußzeilen, PDF mit Tabelle
-  und Bild, **gescannte PDF (OCR)**, Text-Import → Vorschlag → Speichern → Bibliothek → Favorit → Assistent.
-* ✅ Lesezeichen gegen nachgebaute Zaubertopf-/Cookidoo-Seiten; ZauberTopf-Leser mit drei echten, angemeldet gespeicherten
-  Club-Seiten (liegen nur lokal in `tests/fixtures/privat/`, werden wegen Urheberrecht nie committet).
-* ✅ Ausfüllhilfe gegen einen nachgebauten Cookidoo-Editor (Aufbau aus einer gespeicherten Editor-Seite).
-* ⚠️ **Noch nicht auf echtem Windows getestet** (Build entsteht unter Linux; Struktur der EXE und Inhalt des Installers
-  sind geprüft). Ebenfalls ungetestet: echtes cookidoo.de (insb. ob der echte Editor die eingetragenen Inhalte genauso übernimmt), echte Zaubertopf-Seiten, KI mit echtem Schlüssel.
+Vollständiges Protokoll der Tests 1–13 aus dem Auftrag: **[docs/TESTS.md](docs/TESTS.md)**.
+* ✅ 42 Unit-/Integrationstests, 4 Oberflächen-Testreihen (Import inkl. OCR, Link/Lesezeichen, Ausfüllhilfe, Sync mit zwei Geräten).
+* ✅ Synchronisierung gegen die offiziellen Firebase-Emulatoren: erstes Hochladen, zweites Gerät, Änderungen in beide
+  Richtungen, offline, Konflikt, Löschen, Kategorien, Bilder nur bei Änderung, Sicherheitsregeln, Geräte entfernen.
+* ✅ Datenbank-Update 1.3 → 2.0 (automatische Sicherung vorher).
+* ⚠️ **Noch nicht auf echtem Windows getestet** (Build entsteht unter Linux). Ebenfalls ungetestet: echtes cookidoo.de-Speichern
+  im Editor, echtes Firebase-Projekt (nur Emulatoren), KI mit echtem Schlüssel. Checkliste in docs/TESTS.md.
 
 ### Veröffentlichung (später)
 * Code-Signing-Zertifikat besorgen und EXE + Installer signieren (verhindert die SmartScreen-Warnung).

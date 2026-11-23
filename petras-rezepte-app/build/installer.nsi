@@ -65,11 +65,13 @@ Section "Programm" SecMain
   File "${APPDIR}\LIZENZ.txt"
   File "${APPDIR}\LIZENZEN.txt"
   File "${APPDIR}\LIESMICH.txt"
+  File "${APPDIR}\SYNC-ANLEITUNG.txt"
 
   CreateShortCut "$DESKTOP\${APPNAME}.lnk" "$INSTDIR\${EXE}" "" "$INSTDIR\app.ico" 0 SW_SHOWNORMAL "" "Rezepte für den Thermomix verwalten"
   CreateDirectory "$SMPROGRAMS\${APPNAME}"
   CreateShortCut "$SMPROGRAMS\${APPNAME}\${APPNAME}.lnk" "$INSTDIR\${EXE}" "" "$INSTDIR\app.ico" 0
   CreateShortCut "$SMPROGRAMS\${APPNAME}\Kurzanleitung.lnk" "$INSTDIR\LIESMICH.txt"
+  CreateShortCut "$SMPROGRAMS\${APPNAME}\Synchronisierung einrichten.lnk" "$INSTDIR\SYNC-ANLEITUNG.txt"
   CreateShortCut "$SMPROGRAMS\${APPNAME}\${APPNAME} deinstallieren.lnk" "$INSTDIR\Deinstallieren.exe"
 
   WriteUninstaller "$INSTDIR\Deinstallieren.exe"
@@ -95,6 +97,7 @@ Section "Uninstall"
   Delete "$INSTDIR\LIZENZ.txt"
   Delete "$INSTDIR\LIZENZEN.txt"
   Delete "$INSTDIR\LIESMICH.txt"
+  Delete "$INSTDIR\SYNC-ANLEITUNG.txt"
   Delete "$INSTDIR\Deinstallieren.exe"
   RMDir "$INSTDIR"
   DeleteRegKey HKCU "${UNINSTKEY}"

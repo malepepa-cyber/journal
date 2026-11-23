@@ -98,6 +98,9 @@ copyFileSync(r('build', 'icon.ico'), join(app, 'app.ico'));
 copyFileSync(r('LICENSE.txt'), join(app, 'LIZENZ.txt'));
 copyFileSync(r('build', 'LIZENZEN-Drittanbieter.txt'), join(app, 'LIZENZEN.txt'));
 writeFileSync(join(app, 'LIESMICH.txt'), readFileSync(r('build', 'LIESMICH.txt'), 'utf8').replace(/\n/g, '\r\n'));
+// Sync-Anleitung als einfache Textdatei (Windows-Zeilenenden) für den Programmordner
+writeFileSync(join(app, 'SYNC-ANLEITUNG.txt'), readFileSync(r('docs', 'SYNC-ANLEITUNG.md'), 'utf8')
+  .replace(/^#+ /gm, '').replace(/\*\*/g, '').replace(/`/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/\n/g, '\r\n'));
 
 // ---------- 5) Installer ----------
 execFileSync('makensis', ['-V2', `-DVERSION=${pkg.version}`, `-DAPPDIR=${app}`, `-DOUTFILE=${join(out, `PetrasRezepteApp-Setup-${pkg.version}.exe`)}`, r('build', 'installer.nsi')], { stdio: 'inherit' });

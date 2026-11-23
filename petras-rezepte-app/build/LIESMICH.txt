@@ -5,10 +5,10 @@ STARTEN
   Doppelklick auf „Petras Rezepte App“ auf dem Desktop. Die App öffnet sich als eigenes
   Fenster in Google Chrome (falls Chrome fehlt: Microsoft Edge).
 
-REZEPT ÜBERNEHMEN
-  1. „Rezept importieren“ wählen.
-  2. Text aus dem Zaubertopf Club einfügen – ODER – die PDF hineinziehen
-     (PDF erzeugen: im Browser Strg + P → „Als PDF speichern“).
+REZEPT ÜBERNEHMEN (die Anleitung steht auch auf der Importseite)
+  1. „Rezept importieren“ → „Öffne den Zaubertopf Club“ → Rezept öffnen.
+  2. Mit Strg + S speichern („Webseite, vollständig“) und die Datei in die App
+     ziehen → „Rezept jetzt erkennen“. Auch PDF, Word, TXT und Fotos gehen.
   3. Rezept prüfen. Grüne Knöpfe = Thermomix-Einstellungen aus dem Rezept.
      Gestrichelte Knöpfe = Vorschläge der App – erst nach „Übernehmen“ gültig.
   4. „Speichern & zu Cookidoo“ klicken und dem Assistenten folgen.
@@ -19,8 +19,13 @@ TIPP: LESEZEICHEN
   Einstellungen → Cookidoo → Knopf „➜ Petras Rezepte“ in die Lesezeichenleiste ziehen.
   Dann auf einer Rezeptseite anklicken → in der App „Aus Zwischenablage einfügen“.
 
+PC UND NOTEBOOK SYNCHRONISIEREN (optional, kostenlos)
+  Einmalig einrichten: siehe SYNC-ANLEITUNG.txt (Startmenü → „Synchronisierung einrichten“).
+  Danach: Einstellungen → Geräte und Synchronisierung. Am Notebook den Verbindungscode
+  eingeben und mit demselben Konto anmelden. Ohne Internet wird lokal weitergearbeitet.
+
 DATEN & SICHERUNG
-  Alle Rezepte liegen nur auf diesem PC:  %APPDATA%\Petras Rezepte App
+  Alle Rezepte liegen auf diesem Gerät:  %APPDATA%\Petras Rezepte App
   Automatische tägliche Sicherung; manuell unter Einstellungen → Datensicherung.
   Export aller Rezepte als Datei: Einstellungen → „Alle Rezepte exportieren“.
 
