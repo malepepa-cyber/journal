@@ -4,7 +4,7 @@
  */
 import { parseRecipeText } from '../parser.ts';
 import { parseDuration } from '../tm.ts';
-import { extractZaubertopf, type SiteResult } from './zaubertopf.ts';
+import { extractZaubertopf, findImageUrl, type SiteResult } from './zaubertopf.ts';
 
 const clean = (s: unknown) => String(s ?? '')
   .replace(/<[^>]+>/g, ' ').replace(/&nbsp;| /g, ' ').replace(/­/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"')
@@ -42,6 +42,11 @@ const toText = (r: { title: string; servings?: string; prep?: number | null; tot
 
 /** Liest ein Rezept aus einem HTML-Dokument. `selection` = markierter Text (hat Vorrang). */
 export function extractFromDom(doc: Document, url = '', selection = ''): SiteResult & { method: string } {
+  const res = extractInner(doc, url, selection);
+  return { ...res, imageUrl: res.imageUrl ?? findImageUrl(doc) };
+}
+
+function extractInner(doc: Document, url: string, selection: string): SiteResult & { method: string } {
   if (selection.trim().length > 80) {
     return { recipe: parseRecipeText(selection, { type: 'web', name: 'markierter Text', url }), notes: [], subRecipes: [], complete: true, method: 'markierter Text' };
   }

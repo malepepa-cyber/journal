@@ -11,6 +11,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 export type Progress = (p: { label: string; value: number }) => void;
 
 import { itemsToLines, type PdfItem } from '../../../shared/pdflines.ts';
+import { docToText } from '../../../shared/doc.ts';
 export { itemsToLines };
 
 let ocrWorker: Promise<any> | null = null;
@@ -68,11 +69,12 @@ export async function docxToText(buf: ArrayBuffer): Promise<string> {
   return String(r.value ?? '');
 }
 
-export type ImportKind = 'pdf' | 'docx' | 'txt' | 'image' | 'html';
+export type ImportKind = 'pdf' | 'docx' | 'doc' | 'txt' | 'image' | 'html';
 export function kindOf(file: File): ImportKind | null {
   const n = file.name.toLowerCase();
   if (file.type === 'application/pdf' || n.endsWith('.pdf')) return 'pdf';
   if (n.endsWith('.docx')) return 'docx';
+  if (n.endsWith('.doc') || file.type === 'application/msword') return 'doc';
   if (file.type === 'text/html' || /\.html?$/.test(n) || n.endsWith('.mhtml')) return 'html';
   if (file.type.startsWith('text/') || n.endsWith('.txt')) return 'txt';
   if (/^image\/(jpeg|png|webp|bmp)$/.test(file.type) || /\.(jpe?g|png|webp|bmp)$/.test(n)) return 'image';
@@ -90,6 +92,7 @@ export async function fileToText(file: File, progress?: Progress): Promise<{ tex
     return { text: /\.mhtml$/i.test(file.name) || /^MIME-Version:/im.test(raw.slice(0, 500)) ? mhtmlToHtml(raw) : raw, kind, ocr: false };
   }
   if (kind === 'txt') return { text: await file.text(), kind, ocr: false };
+  if (kind === 'doc') { progress?.({ label: 'Ältere Word-Datei wird gelesen …', value: 0.5 }); return { text: docToText(new Uint8Array(await file.arrayBuffer())), kind, ocr: false }; }
   progress?.({ label: 'Texterkennung (OCR) wird vorbereitet …', value: 0.05 });
   return { text: await ocrCanvas(file, progress), kind, ocr: true };
 }
@@ -112,7 +115,7 @@ export function mhtmlToHtml(raw: string): string {
 }
 
 /** Foto verkleinern (max. 1400 px, JPEG) – spart Speicher in der Datenbank. */
-export async function resizePhoto(file: File): Promise<string> {
+export async function resizePhoto(file: Blob): Promise<string> {
   const img = await createImageBitmap(file);
   const scale = Math.min(1, 1400 / Math.max(img.width, img.height));
   const c = document.createElement('canvas');

@@ -7,7 +7,8 @@ import { structureWithAi } from './ai.ts';
 import { log } from './log.ts';
 import { APP_VERSION, dataDir } from './paths.ts';
 import { bookmarkletSource } from './bookmarklet.ts';
-import { fetchRecipePage, FetchError } from './fetch-url.ts';
+import { fetchRecipePage, fetchImage, FetchError } from './fetch-url.ts';
+import { openExternal } from './launcher.ts';
 import type { Recipe } from '../shared/model.ts';
 
 export class HttpError extends Error { constructor(public status: number, message: string) { super(message); } }
@@ -154,6 +155,13 @@ route('POST', '/api/fetch-url', async ({ body }) => {
   try { return await fetchRecipePage(String((await body()).url ?? '')); }
   catch (e) { if (e instanceof FetchError) throw new HttpError(e.status, e.message); throw e; }
 });
+
+route('POST', '/api/fetch-image', async ({ body }) => {
+  try { return await fetchImage(String((await body()).url ?? '')); }
+  catch (e) { if (e instanceof FetchError) throw new HttpError(e.status, e.message); throw e; }
+});
+/** Externe Seite (Zaubertopf Club, Cookidoo) im normalen Chrome öffnen */
+route('POST', '/api/open-external', async ({ body }) => ({ opened: openExternal(String((await body()).url ?? '')) }));
 
 // ---------- Cookidoo-Helfer (Lesezeichen) ----------
 route('GET', '/api/bookmarklet', () => ({ code: bookmarkletSource() }));

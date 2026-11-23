@@ -24,6 +24,26 @@ export interface SiteResult {
   subRecipes: { title: string; url: string }[];
   /** false = Seite zeigt nur eine Vorschau (nicht angemeldet) */
   complete: boolean;
+  /** Adresse des Rezeptbilds (falls die Seite eines angibt) */
+  imageUrl?: string;
+}
+
+/** Rezeptbild aus den Seitendaten (schema.org „image“ oder og:image) */
+export function findImageUrl(doc: Document): string | undefined {
+  for (const s of Array.from(doc.querySelectorAll('script[type="application/ld+json"]'))) {
+    try {
+      const d = JSON.parse(s.textContent ?? '');
+      const nodes = Array.isArray(d) ? d : d['@graph'] ?? [d];
+      for (const n of nodes) {
+        if (n?.['@type'] !== 'Recipe' || !n.image) continue;
+        const img = Array.isArray(n.image) ? n.image[0] : n.image;
+        const url = typeof img === 'string' ? img : img?.url;
+        if (url && /^https?:\/\//.test(url)) return url;
+      }
+    } catch { /* ignorieren */ }
+  }
+  const og = doc.querySelector('meta[property="og:image"]')?.getAttribute('content');
+  return og && /^https?:\/\//.test(og) ? og : undefined;
 }
 
 const clean = (s: string | null | undefined) =>
@@ -245,5 +265,5 @@ export function extractZaubertopf(doc: Document, url = ''): SiteResult | null {
       notes.unshift(`Schritte aus dem Kochmodus übernommen (${ks.length} Schritte in Thermomix-Reihenfolge, Zutaten je Schritt). Der Originaltext der Seite ist im Editor umschaltbar.`);
     }
   }
-  return { recipe: r, notes, subRecipes, complete };
+  return { recipe: r, notes, subRecipes, complete, imageUrl: findImageUrl(doc) };
 }

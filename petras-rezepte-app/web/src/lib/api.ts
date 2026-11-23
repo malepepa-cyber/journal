@@ -72,6 +72,8 @@ export const Api = {
   renameProfile: (id: number, name: string) => api(`/api/profiles/${id}`, { method: 'PATCH', json: { name } }),
   deleteProfile: (id: number) => api(`/api/profiles/${id}`, { method: 'DELETE' }),
   bookmarklet: () => api<{ code: string }>('/api/bookmarklet'),
+  fetchImage: (url: string) => api<{ data: string; type: string }>('/api/fetch-image', { method: 'POST', json: { url } }),
+  openExternal: (url: string) => api<{ opened: boolean }>('/api/open-external', { method: 'POST', json: { url } }),
   fetchUrl: (url: string) => api<{ html: string; url: string }>('/api/fetch-url', { method: 'POST', json: { url } }),
   shutdown: () => api('/api/shutdown', { method: 'POST' }),
   heartbeat: () => api('/api/heartbeat', { method: 'POST' }),
@@ -86,4 +88,10 @@ export async function downloadExport(ids?: number[]) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+/** Externe Seite im normalen Chrome öffnen (Fallback: neues Fenster) */
+export async function openInChrome(url: string) {
+  try { if ((await Api.openExternal(url)).opened) return; } catch { /* Fallback */ }
+  window.open(url, '_blank', 'noopener');
 }

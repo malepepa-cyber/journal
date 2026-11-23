@@ -216,3 +216,14 @@ test('Kein Thermomix-Vorschlag für Schritte auf dem Herd', () => {
   assert.equal(suggestForStep('Kartoffeln im Topf 20 Minuten garen.').length, 0);
   assert.equal(suggestForStep('Alles 20 Minuten köcheln lassen.').length, 1, 'Mixtopf-Schritt weiterhin mit Vorschlag');
 });
+
+test('Ältere Word-Datei (.doc): Text aus UTF-16- und 8-Bit-Abschnitten', async () => {
+  const { docToText } = await import('../shared/doc.ts');
+  const text = 'Hefezopf\rZutaten\r500 g Mehl\r250 ml Milch\rZubereitung\r1. Milch 2 Min./37°C/Stufe 2 erwärmen.\r';
+  const utf16 = new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 1, 2, 3, ...Array.from(Buffer.from(text, 'utf16le')), 0, 0, 7, 9]);
+  const out = docToText(utf16);
+  assert.match(out, /Hefezopf\n.*Zutaten\n500 g Mehl/s);
+  const r = parseRecipeText(out);
+  assert.equal(r.ingredients.length, 2);
+  assert.equal(findSettings(r.steps[0].text).length, 1);
+});

@@ -59,3 +59,18 @@ export function openApp(url: string): void {
     log('error', 'Browser konnte nicht geöffnet werden', e);
   }
 }
+
+/** Erlaubte externe Seiten (werden im normalen Chrome geöffnet, nicht im App-Fenster) */
+const EXTERNAL_OK = /^https:\/\/([a-z0-9-]+\.)*(zaubertopf-club\.de|zaubertopf\.de|cookidoo\.(de|at|ch)|firebase\.google\.com|console\.firebase\.google\.com)(\/|$)/i;
+
+export function openExternal(url: string): boolean {
+  if (!EXTERNAL_OK.test(url)) return false;
+  if (process.env.PRA_NO_BROWSER) return false; // Tests: die Oberfläche öffnet dann selbst
+  const detached = { detached: true, stdio: 'ignore' as const };
+  try {
+    const chrome = findChrome();
+    if (chrome) { spawn(chrome, [url], detached).unref(); return true; }
+    if (process.platform === 'win32') { spawn('cmd.exe', ['/d', '/s', '/c', `start "" "${url}"`], { ...detached, windowsHide: true, windowsVerbatimArguments: true }).unref(); return true; }
+    return false;
+  } catch (e) { log('error', 'Externe Seite konnte nicht geöffnet werden', e); return false; }
+}

@@ -51,8 +51,8 @@ const SCAN = `<body style="font:22px Georgia,serif;padding:40px;background:#fbfa
     await p.goto(`${B}/#t=${TOKEN}`); await p.waitForSelector('text=Was kochen wir heute?');
 
     const importFile = async (file) => {
-      await p.goto(`${B}/#/importieren`); await p.waitForSelector('text=Datei hierher ziehen');
-      await p.setInputFiles('input[type=file]', join(tmp, file));
+      await p.goto(`${B}/#/importieren`); await p.waitForSelector('text=Rezeptdatei hier ablegen');
+      await p.setInputFiles('input[type=file]', join(tmp, file)); await p.click('#erkennen');
       await p.waitForSelector('text=Neues Rezept prüfen', { timeout: 120000 }); await p.waitForTimeout(300);
       return {
         title: await p.inputValue('input[aria-label=Rezeptname]'),
@@ -88,7 +88,7 @@ const SCAN = `<body style="font:22px Georgia,serif;padding:40px;background:#fbfa
     });
     await check('Text → Vorschlag bestätigen → Speichern → Bibliothek → Favorit', async () => {
       await p.goto(`${B}/#/importieren`);
-      await p.fill('textarea[aria-label=Rezepttext]', 'Vanillepudding\n4 Portionen\nZutaten\n500 ml Milch\n40 g Speisestärke\n60 g Zucker\n1 Pck. Vanillezucker\nZubereitung\n1. Alle Zutaten in den Mixtopf geben.\n2. Unter Rühren aufkochen.\n3. In Schälchen füllen und abkühlen lassen.');
+      await p.click('button:has-text("Text einfügen")'); await p.fill('textarea[aria-label=Rezepttext]', 'Vanillepudding\n4 Portionen\nZutaten\n500 ml Milch\n40 g Speisestärke\n60 g Zucker\n1 Pck. Vanillezucker\nZubereitung\n1. Alle Zutaten in den Mixtopf geben.\n2. Unter Rühren aufkochen.\n3. In Schälchen füllen und abkühlen lassen.');
       await p.click('text=Rezept erkennen'); await p.waitForSelector('text=Neues Rezept prüfen');
       await p.locator('ol li button:has-text("Übernehmen")').first().click();
       assert.match(await p.locator('ol li textarea').nth(1).inputValue(), /100°C\/Linkslauf\/Stufe 1/);

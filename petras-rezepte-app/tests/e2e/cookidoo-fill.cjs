@@ -51,7 +51,7 @@ Zubereitung
 
     // Rezept anlegen
     await app.goto(`${B}/#/importieren`);
-    await app.fill('textarea[aria-label=Rezepttext]', RECIPE);
+    await app.click('button:has-text("Text einfügen")'); await app.fill('textarea[aria-label=Rezepttext]', RECIPE);
     await app.click('text=Rezept erkennen'); await app.waitForSelector('text=Neues Rezept prüfen');
     await app.click('button:has-text("Speichern & zu Cookidoo")'); await app.waitForSelector('text=nach Cookidoo übertragen');
 
@@ -96,7 +96,7 @@ Zubereitung
     await check('Club-Rezept (Kochmodus) → Schritte mit markierten Zutaten <cr-ingredient>', async () => {
       await app.bringToFront();
       await app.goto(`${B}/#/importieren`);
-      await app.setInputFiles('input[type=file]', join(__dirname, '..', 'fixtures', 'zaubertopf-aufbau.html'));
+      await app.setInputFiles('input[type=file]', join(__dirname, '..', 'fixtures', 'zaubertopf-aufbau.html')); await app.click('#erkennen');
       await app.waitForSelector('text=Neues Rezept prüfen');
       assert.ok(await app.locator('text=⚖ 1 Zwiebel, halbiert').count(), 'Zutat am Schritt angezeigt');
       assert.ok(await app.locator('button:has-text("Originaltext verwenden")').count(), 'Umschalter vorhanden');

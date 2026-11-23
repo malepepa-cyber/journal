@@ -76,18 +76,28 @@ const check = async (name, fn) => { try { await fn(); console.log(`✓ ${name}`)
     });
     await check('Gespeicherte Webseite (.html) importieren', async () => {
       await app.goto(`${B}/#/importieren`);
-      await app.setInputFiles('input[type=file]', fx('zaubertopf-aufbau.html'));
+      await app.setInputFiles('input[type=file]', fx('zaubertopf-aufbau.html')); await app.click('#erkennen');
       await app.waitForSelector('text=Neues Rezept prüfen');
       assert.equal(await app.inputValue('input[aria-label=Rezeptname]'), 'Test-Linsencurry mit Kokos');
       assert.equal(await app.$$eval('ol li button.tm-pill', (e) => e.length), 4);
       assert.match(await app.locator('text=Bitte kurz prüfen').locator('..').textContent(), /Hinweis|Thermomix/);
       await app.click('button:has-text("Verwerfen")'); await app.click('dialog button:has-text("Verwerfen")');
     });
+    await check('Gespeicherte Seite + Bilderordner → Rezeptbild übernommen', async () => {
+      await app.goto(`${B}/#/importieren`);
+      await app.setInputFiles('input[type=file]', [fx('zaubertopf-aufbau.html'), fx('test-linsencurry.jpg')]);
+      assert.match(await app.locator('section:has(#upload-titel)').textContent(), /1 Bild aus dem Ordner/);
+      await app.click('#erkennen');
+      await app.waitForSelector('text=Neues Rezept prüfen');
+      const src = await app.locator('img[src^="data:image/jpeg"]').first().getAttribute('src');
+      assert.ok(src && src.length > 1000, 'Foto im Editor');
+      await app.click('button:has-text("Verwerfen")'); await app.click('dialog button:has-text("Verwerfen")');
+    });
     for (const f of ['zt-rouladen.html', 'zt-bandnudeln.html']) {
       if (!existsSync(fx(`privat/${f}`))) continue;
       await check(`Gespeicherte Club-Seite ${f}`, async () => {
         await app.goto(`${B}/#/importieren`);
-        await app.setInputFiles('input[type=file]', fx(`privat/${f}`));
+        await app.setInputFiles('input[type=file]', fx(`privat/${f}`)); await app.click('#erkennen');
         await app.waitForSelector('text=Neues Rezept prüfen');
         const pills = await app.$$eval('ol li button.tm-pill', (e) => e.map((x) => x.textContent));
         console.log(`   ${await app.inputValue('input[aria-label=Rezeptname]')}: ${pills.join(' | ')}`);

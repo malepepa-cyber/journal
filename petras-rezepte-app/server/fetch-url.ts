@@ -70,3 +70,22 @@ export async function fetchRecipePage(raw: string): Promise<{ html: string; url:
   }
   throw new FetchError(502, 'Zu viele Weiterleitungen.');
 }
+
+/** Rezeptbild einer öffentlichen Adresse laden (nur Bilder, max. 8 MB) – für die private Rezeptbibliothek. */
+export async function fetchImage(raw: string): Promise<{ data: string; type: string }> {
+  let url = await assertPublicUrl(raw);
+  for (let hop = 0; hop <= 5; hop++) {
+    let res: Response;
+    try {
+      res = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(15_000), headers: { 'User-Agent': `Mozilla/5.0 PetrasRezepteApp/${APP_VERSION}`, Accept: 'image/*' } });
+    } catch { throw new FetchError(502, 'Das Bild konnte nicht geladen werden.'); }
+    if (res.status >= 300 && res.status < 400 && res.headers.get('location')) { url = await assertPublicUrl(new URL(res.headers.get('location')!, url).toString()); continue; }
+    if (!res.ok) throw new FetchError(502, `Bild nicht verfügbar (${res.status}).`);
+    const type = (res.headers.get('content-type') ?? '').split(';')[0].trim();
+    if (!/^image\/(jpeg|png|webp|gif|avif)$/.test(type)) throw new FetchError(415, 'Unter dieser Adresse ist kein Bild.');
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length > 8 * 1024 * 1024) throw new FetchError(413, 'Das Bild ist zu groß.');
+    return { data: `data:${type};base64,${buf.toString('base64')}`, type };
+  }
+  throw new FetchError(502, 'Zu viele Weiterleitungen.');
+}
