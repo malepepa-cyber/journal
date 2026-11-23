@@ -51,7 +51,7 @@ export function RecipeCard({ r, onFavorite }: { r: RecipeSummary; onFavorite?: (
       <button className="block w-full text-left" onClick={() => go(`rezept/${r.id}`)}>
         <RecipeVisual category={r.category} photo={r.photo} className="h-40 w-full" />
         <div className="p-5 pb-3">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-sage-600">{r.category}</p>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-sage-600">{r.category}{r.conflict && <span className="ml-2 rounded-full bg-apricot-100 px-2 py-0.5 normal-case tracking-normal text-apricot-700">Konflikt-Kopie</span>}</p>
           <h3 className="line-clamp-2 min-h-[2.6em] text-lg font-bold leading-snug">{r.title}</h3>
         </div>
       </button>

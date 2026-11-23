@@ -9,6 +9,7 @@ import { Library } from './pages/Library.tsx';
 import { Editor } from './pages/Editor.tsx';
 import { Transfer } from './pages/Transfer.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
+import { SyncBadge } from './components/SyncBadge.tsx';
 
 const NAV = [
   { path: '', label: 'Dashboard', icon: Home },
@@ -69,9 +70,9 @@ export function App() {
             </button>
           ))}
         </nav>
-        <div className="mt-auto rounded-2xl bg-sage-50 p-4 text-sm text-sage-900">
-          <div className="mb-1 flex items-center gap-2 font-semibold"><ChefHat size={16} /> {session?.profiles.find((p) => p.id === session.profileId)?.name ?? '…'}</div>
-          <p className="text-sage-700">Alle Daten bleiben auf diesem PC.</p>
+        <div className="mt-auto space-y-2">
+          <div className="flex items-center gap-2 px-2 text-sm font-semibold text-sage-900"><ChefHat size={16} /> {session?.profiles.find((p) => p.id === session.profileId)?.name ?? '…'}</div>
+          <SyncBadge />
         </div>
       </aside>
 
@@ -84,6 +85,7 @@ export function App() {
               <n.icon size={18} /><span className="hidden sm:inline">{n.label}</span>
             </button>
           ))}
+          <span className="ml-auto" /><SyncBadge compact />
         </nav>
         <main className="mx-auto max-w-[1180px] px-6 py-8 lg:px-10 lg:py-10">
           {error && !session ? (

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Search, Heart, BookOpen, FileDown, LayoutGrid, List, Tags } from 'lucide-react';
 import { CategoryManager } from '../components/CategoryManager.tsx';
 import { useCategories } from '../lib/session.tsx';
+import { useAfterSync } from '../lib/sync.tsx';
 import { type RecipeSummary } from '../../../shared/model.ts';
 import { Api } from '../lib/api.ts';
 import { go, useQuery } from '../lib/router.ts';
@@ -27,6 +28,9 @@ export function Library({ mode }: { mode: 'alle' | 'favoriten' }) {
     }, 150);
     return () => clearTimeout(t);
   }, [q, cat, sort, mode, tick]);
+  useAfterSync(() => setTick((t) => t + 1));
+  const onlyConflicts = query.get('konflikte') === '1';
+  const shown = onlyConflicts ? (list ?? []).filter((r) => r.conflict) : list;
 
   const fav = async (r: RecipeSummary) => {
     await Api.favorite(r.id, !r.favorite);
@@ -64,16 +68,17 @@ export function Library({ mode }: { mode: 'alle' | 'favoriten' }) {
       </div>
       <CategoryManager open={manage} onClose={() => setManage(false)} onChanged={() => setTick((t) => t + 1)} />
 
+      {onlyConflicts && <div className="card mb-4 flex items-center gap-3 bg-apricot-100/70 p-4"><span className="flex-1">Es werden nur <b>Konflikt-Kopien</b> angezeigt. Öffne eine Kopie, um zu entscheiden, welche Fassung bleibt.</span><button className="btn-ghost btn-sm" onClick={() => go('rezepte')}>Alle anzeigen</button></div>}
       {list && list.length === 0 ? (
         mode === 'favoriten' && !q && !cat
           ? <Empty icon={<Heart />} title="Noch keine Favoriten" text="Tippe bei einem Rezept auf das Herz, dann findest du es hier wieder." action={<button className="btn-primary" onClick={() => go('rezepte')}>Zu meinen Rezepten</button>} />
           : <Empty icon={<BookOpen />} title={q || cat ? 'Nichts gefunden' : 'Noch keine Rezepte'} text={q || cat ? 'Versuche einen anderen Suchbegriff oder eine andere Kategorie.' : 'Importiere dein erstes Rezept – als Text oder PDF.'}
               action={<button className="btn-primary" onClick={() => go('importieren')}>Rezept importieren</button>} />
       ) : view === 'karten' ? (
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">{(list ?? []).map((r) => <RecipeCard key={r.id} r={r} onFavorite={fav} />)}</div>
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">{(shown ?? []).map((r) => <RecipeCard key={r.id} r={r} onFavorite={fav} />)}</div>
       ) : (
         <div className="card divide-y divide-cream-300/70 overflow-hidden">
-          {(list ?? []).map((r) => (
+          {(shown ?? []).map((r) => (
             <div key={r.id} className="flex items-center gap-4 p-3 hover:bg-cream-100">
               <button className="flex min-w-0 flex-1 items-center gap-4 text-left" onClick={() => go(`rezept/${r.id}`)}>
                 <RecipeVisual category={r.category} photo={r.photo} className="h-14 w-14 shrink-0 rounded-2xl text-[0] [&_span]:text-2xl" />

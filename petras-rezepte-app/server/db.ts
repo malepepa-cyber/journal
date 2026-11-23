@@ -90,6 +90,12 @@ export function closeDb(): void {
 
 function migrate(d: DatabaseSync): void {
   const v = Number((d.prepare('PRAGMA user_version').get() as { user_version: number }).user_version);
+  if (v > 0 && v < MIGRATIONS.length) {
+    // Vor einem Datenbank-Update immer eine vollständige Sicherung anlegen
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const target = join(dataDir(), 'backups', `sicherung-${stamp}-vor-update.db`);
+    try { d.exec(`VACUUM INTO '${target.replace(/'/g, "''")}'`); log('info', 'Sicherung vor Datenbank-Update erstellt'); } catch (e) { log('error', 'Sicherung vor Update fehlgeschlagen', e); }
+  }
   for (let i = v; i < MIGRATIONS.length; i++) {
     d.exec('BEGIN');
     try {

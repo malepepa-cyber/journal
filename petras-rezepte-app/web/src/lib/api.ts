@@ -41,7 +41,31 @@ export interface Session { version: string; dataDir: string; profileId: number; 
 export interface Stats { total: number; favorites: number; transferred: number; byCategory: Record<string, number> }
 export interface BackupInfo { name: string; size: number; createdAt: string; kind: string }
 
+export interface SyncStatus {
+  configured: boolean; signedIn: boolean; email: string | null; profileId: number | null;
+  state: 'aus' | 'abgemeldet' | 'bereit' | 'läuft' | 'ok' | 'offline' | 'fehler' | 'entfernt';
+  message: string; lastSync: string | null; lastError: string | null; pending: number; conflicts: number;
+  deviceId: string; deviceName: string; nextTry: string | null;
+}
+export interface DeviceInfo { id: string; name: string; platform: string; appVersion: string; lastSeen: string | null; removed: boolean; current: boolean }
+export interface HistoryEntry { id: number; savedAt: string; reason: string; title: string }
+
 export const Api = {
+  syncStatus: () => api<SyncStatus>('/api/sync/status'),
+  syncConfig: (c: { apiKey?: string; projectId?: string; code?: string }) => api<SyncStatus>('/api/sync/config', { method: 'PUT', json: c }),
+  syncClearConfig: () => api<SyncStatus>('/api/sync/config', { method: 'DELETE' }),
+  syncCode: () => api<{ code: string | null }>('/api/sync/code'),
+  syncRegister: (email: string, password: string) => api<SyncStatus>('/api/sync/register', { method: 'POST', json: { email, password } }),
+  syncLogin: (email: string, password: string) => api<SyncStatus>('/api/sync/login', { method: 'POST', json: { email, password } }),
+  syncReset: (email: string) => api('/api/sync/reset', { method: 'POST', json: { email } }),
+  syncLogout: () => api<SyncStatus>('/api/sync/logout', { method: 'POST' }),
+  syncNow: () => api<SyncStatus>('/api/sync/now', { method: 'POST' }),
+  syncDevices: () => api<DeviceInfo[]>('/api/sync/devices'),
+  syncRemoveDevice: (id: string) => api(`/api/sync/devices/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  syncDeviceName: (name: string) => api<SyncStatus>('/api/sync/device-name', { method: 'PUT', json: { name } }),
+  history: (id: number) => api<HistoryEntry[]>(`/api/recipes/${id}/history`),
+  restoreVersion: (id: number, hid: number) => api<Recipe>(`/api/recipes/${id}/history/${hid}/restore`, { method: 'POST' }),
+  keepConflict: (id: number) => api<Recipe>(`/api/recipes/${id}/conflict/keep`, { method: 'POST' }),
   session: () => api<Session>('/api/session'),
   stats: () => api<Stats>('/api/stats'),
   list: (q: Record<string, string | number | undefined> = {}) =>

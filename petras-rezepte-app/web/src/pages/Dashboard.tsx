@@ -4,6 +4,7 @@ import { type RecipeSummary } from '../../../shared/model.ts';
 import { Api, type Stats } from '../lib/api.ts';
 import { go } from '../lib/router.ts';
 import { useSession, useCategories } from '../lib/session.tsx';
+import { useAfterSync } from '../lib/sync.tsx';
 import { lookOf } from '../components/recipe-bits.tsx';
 import { RecipeCard } from '../components/recipe-bits.tsx';
 import { useToast } from '../components/ui.tsx';
@@ -30,6 +31,7 @@ export function Dashboard() {
     Api.draft().then((d) => setDraft(d?.data?.recipe?.title || d?.data?.recipe?.steps?.length ? { title: d.data.recipe.title || 'Ohne Namen', updatedAt: d.updatedAt } : null)).catch(() => {});
   };
   useEffect(load, [session?.profileId]);
+  useAfterSync(load);
 
   const fav = async (r: RecipeSummary) => { await Api.favorite(r.id, !r.favorite); load(); };
 

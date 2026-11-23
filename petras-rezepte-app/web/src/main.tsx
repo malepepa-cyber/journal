@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './styles.css';
 import { App } from './App.tsx';
 import { SessionProvider } from './lib/session.tsx';
+import { SyncProvider } from './lib/sync.tsx';
 import { ToastProvider, ConfirmProvider } from './components/ui.tsx';
 import { Api } from './lib/api.ts';
 
@@ -12,11 +13,13 @@ window.addEventListener('unhandledrejection', (e) => Api.log(String(e.reason?.me
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <SessionProvider>
+      <SyncProvider>
       <ToastProvider>
         <ConfirmProvider>
           <App />
         </ConfirmProvider>
       </ToastProvider>
+      </SyncProvider>
     </SessionProvider>
   </StrictMode>,
 );

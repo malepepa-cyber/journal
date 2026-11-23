@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { User, Globe, Sparkles, DatabaseBackup, Trash2, Info, Power, Plus, Download, Upload, RotateCcw, Bookmark, KeyRound, Check } from 'lucide-react';
+import { User, Globe, Sparkles, DatabaseBackup, Trash2, Info, Power, Plus, Download, Upload, RotateCcw, Bookmark, KeyRound, Check, Cloud } from 'lucide-react';
 import type { RecipeSummary } from '../../../shared/model.ts';
 import { Api, downloadExport, type BackupInfo } from '../lib/api.ts';
 import { useSession } from '../lib/session.tsx';
 import { PageHeader, useConfirm, useToast } from '../components/ui.tsx';
+import { SyncSettings } from '../components/SyncSettings.tsx';
 
 const MARKETS = [
   { label: 'Deutschland (cookidoo.de)', url: 'https://cookidoo.de/created-recipes/de-DE' },
@@ -64,8 +65,11 @@ export function SettingsPage() {
 
   return (
     <div>
-      <PageHeader title="Einstellungen" subtitle="Profile, Cookidoo, KI, Datensicherung" />
+      <PageHeader title="Einstellungen" subtitle="Geräte und Synchronisierung, Profile, Cookidoo, KI, Datensicherung" />
       <div className="grid gap-6 xl:grid-cols-2">
+        <div className="xl:col-span-2">
+          <Panel icon={<Cloud />} title="Geräte und Synchronisierung" id="sync"><SyncSettings /></Panel>
+        </div>
 
         <Panel icon={<User />} title="Profil">
           <div className="space-y-2">
@@ -139,7 +143,7 @@ export function SettingsPage() {
           )}
         </Panel>
 
-        <Panel icon={<DatabaseBackup />} title="Datensicherung">
+        <Panel icon={<DatabaseBackup />} title="Datensicherung" id="sicherung">
           <Toggle checked={s.autoBackup} onChange={(v) => save({ autoBackup: v })} label="Automatisch täglich sichern" hint="Die letzten 20 Sicherungen werden aufbewahrt." />
           <div className="mt-4 flex flex-wrap gap-2">
             <button className="btn-primary btn-sm" onClick={async () => { await Api.backup(); loadLists(); toast('Sicherung erstellt'); }}><DatabaseBackup size={16} /> Jetzt sichern</button>
@@ -186,7 +190,7 @@ export function SettingsPage() {
             <dt className="text-ink-soft">Daten</dt><dd className="break-all font-mono text-sm">{session.dataDir}</dd>
             <dt className="text-ink-soft">Entwickler</dt><dd>© Patrick S.</dd>
           </dl>
-          <p className="mt-4 text-sm text-ink-soft">Alle Rezepte bleiben lokal auf diesem PC. Importierte Rezepte sind nur für den privaten Gebrauch – bitte keine fremden Rezepte oder Bilder weiterverbreiten. Thermomix® und Cookidoo® sind Marken der Vorwerk-Gruppe; diese App steht in keiner Verbindung zu Vorwerk.</p>
+          <p className="mt-4 text-sm text-ink-soft">Alle Rezepte werden auf diesem Gerät gespeichert. Mit eingeschalteter Synchronisierung zusätzlich verschlüsselt übertragen in dein eigenes, privates Firebase-Projekt – sonst nirgendwohin. Importierte Rezepte sind nur für den privaten Gebrauch – bitte keine fremden Rezepte oder Bilder weiterverbreiten. Thermomix® und Cookidoo® sind Marken der Vorwerk-Gruppe; diese App steht in keiner Verbindung zu Vorwerk.</p>
           <p className="mt-2 text-xs text-ink-faint">Enthält Open-Source-Software: React (MIT), pdf.js (Apache-2.0), Tesseract.js (Apache-2.0), mammoth (BSD-2), lucide (ISC), Anthropic SDK (MIT). Details in LIZENZEN.txt im Programmordner.</p>
           <button className="btn-ghost mt-5" onClick={async () => { await Api.shutdown(); document.body.innerHTML = '<div style="font:20px Segoe UI,sans-serif;text-align:center;margin-top:20vh">Petras Rezepte App wurde beendet.<br><small>Dieses Fenster kann geschlossen werden.</small></div>'; }}>
             <Power size={18} /> App beenden

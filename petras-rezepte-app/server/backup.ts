@@ -58,9 +58,15 @@ export function restoreBackup(name: string): void {
   const test = new DatabaseSync(src, { readOnly: true });
   try { test.prepare('SELECT COUNT(*) FROM recipes').get(); } finally { test.close(); }
   createBackup('vor-wiederherstellung');
+  // Geräte- und Anmeldedaten der Synchronisierung gehören zu DIESEM Gerät – sie bleiben beim Wiederherstellen erhalten
+  const keep = openDb().prepare("SELECT key, value FROM meta WHERE key LIKE 'sync.%' OR key LIKE 'secret:%'").all() as { key: string; value: string }[];
   closeDb();
   for (const ext of ['-wal', '-shm']) rmSync(dbPath() + ext, { force: true });
   copyFileSync(src, dbPath());
-  openDb();
+  const d = openDb();
+  d.prepare("DELETE FROM meta WHERE key LIKE 'sync.%' OR key LIKE 'secret:%'").run();
+  for (const k of keep) d.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').run(k.key, k.value);
+  // Wiederhergestellter Stand wird als „geändert“ behandelt → Konflikte werden sicher erkannt, nichts geht verloren
+  d.prepare('UPDATE recipes SET dirty = 1').run();
   log('info', 'Sicherung wiederhergestellt');
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft, Save, Heart, Copy, Download, Trash2, Send, ChevronUp, ChevronDown, Plus, Scissors, X, Check, Pencil,
-  ImagePlus, AlertTriangle, Sparkles, Hourglass, ListPlus, CheckCheck, Info, Type,
+  ImagePlus, AlertTriangle, Sparkles, Hourglass, ListPlus, CheckCheck, Info, Type, History, RotateCcw, GitCompare,
 } from 'lucide-react';
 import {
   ACCESSORIES, DIFFICULTIES, emptyRecipe,
@@ -18,7 +18,8 @@ import { useCategories, useSession } from '../lib/session.tsx';
 import { markGuide } from './ImportPage.tsx';
 import { RecipeVisual, TmPill, CookidooBadge, fmtMin } from '../components/recipe-bits.tsx';
 import { SettingEditor } from '../components/SettingEditor.tsx';
-import { Empty, ProgressOverlay, useConfirm, useToast } from '../components/ui.tsx';
+import { Empty, Modal, ProgressOverlay, useConfirm, useToast } from '../components/ui.tsx';
+import type { HistoryEntry } from '../lib/api.ts';
 
 type EditTarget = { step: number; match: number | null; initial: TmSetting | null; suggestion?: number } | null;
 
@@ -57,6 +58,7 @@ export function Editor({ id }: { id: number | null }) {
   const aiAvailable = !!session?.settings.aiEnabled && !!session?.aiKey;
   const [aiDesc, setAiDesc] = useState<string | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
+  const [versions, setVersions] = useState<HistoryEntry[] | null>(null);
   const stepRefs = useRef<(HTMLTextAreaElement | null)[]>([]);
   const photoRef = useRef<HTMLInputElement>(null);
 
@@ -234,10 +236,47 @@ export function Editor({ id }: { id: number | null }) {
               <Heart size={18} fill={r.favorite ? 'currentColor' : 'none'} /> {r.favorite ? 'Favorit' : 'Merken'}</button>
             <button className="btn-ghost btn-sm" onClick={async () => { const c = await Api.duplicate(r.id!); toast('Kopie erstellt'); go(`rezept/${c.id}`); }}><Copy size={18} /> Duplizieren</button>
             <button className="btn-ghost btn-sm" onClick={() => downloadExport([r.id!])}><Download size={18} /> Exportieren</button>
+            <button className="btn-ghost btn-sm" onClick={() => Api.history(r.id!).then(setVersions).catch((e) => toast(e.message, 'fehler'))}><History size={18} /> Versionen</button>
             <button className="btn-ghost btn-sm text-red-700" onClick={remove}><Trash2 size={18} /> Löschen</button>
           </>}
         </div>
       </div>
+
+      {r.conflict && r.id && (
+        <div className="card mb-6 border-apricot-300 bg-apricot-100/70 p-5">
+          <b className="flex items-center gap-2 text-apricot-700"><GitCompare size={20} /> Konflikt-Kopie</b>
+          <p className="my-2">Dieses Rezept wurde gleichzeitig auf <b>{r.conflict.device}</b> und einem anderen Gerät geändert. Damit nichts verloren geht, wurden beide Fassungen behalten.
+            Das ist die Fassung von <b>{r.conflict.device}</b>.</p>
+          <div className="flex flex-wrap gap-2">
+            <button className="btn-primary btn-sm" disabled={dirty} title={dirty ? 'Bitte zuerst speichern' : ''} onClick={async () => {
+              if (!(await confirm({ title: 'Diese Fassung behalten?', text: 'Sie ersetzt die andere Fassung. Die andere bleibt im Versionsverlauf erhalten.', ok: 'Behalten' }))) return;
+              try { const k = await Api.keepConflict(r.id!); toast('Fassung übernommen'); go(`rezept/${k.id}`); } catch (e: any) { toast(e.message, 'fehler'); }
+            }}><Check size={16} /> Diese Fassung behalten</button>
+            <button className="btn-ghost btn-sm" onClick={async () => {
+              const other = (await Api.list({ q: r.title.replace(/ \(Konflikt-Kopie[^)]*\)$/, '') })).find((x) => !x.conflict);
+              if (other) go(`rezept/${other.id}`); else toast('Die andere Fassung wurde nicht gefunden.', 'info');
+            }}><GitCompare size={16} /> Andere Fassung ansehen</button>
+            <button className="btn-ghost btn-sm text-red-700" onClick={remove}><Trash2 size={16} /> Diese Kopie verwerfen</button>
+          </div>
+        </div>
+      )}
+
+      <Modal open={!!versions} onClose={() => setVersions(null)} title="Versionsverlauf">
+        <p className="mb-3 text-ink-soft">Frühere Fassungen dieses Rezepts (die letzten 30). Beim Wiederherstellen wird die aktuelle Fassung ebenfalls hier abgelegt.</p>
+        <ul className="space-y-2">
+          {(versions ?? []).map((h) => (
+            <li key={h.id} className="flex items-center gap-3 rounded-2xl bg-cream-100 p-3">
+              <span className="min-w-0 flex-1"><b className="block">{new Date(h.savedAt).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' })}</b>
+                <span className="text-sm text-ink-soft">{h.reason}{h.title !== r.title ? ` · „${h.title}“` : ''}</span></span>
+              <button className="btn-soft btn-sm" onClick={async () => {
+                if (dirty && !(await confirm({ title: 'Ungespeicherte Änderungen', text: 'Ungespeicherte Änderungen gehen beim Wiederherstellen verloren.', ok: 'Trotzdem', danger: true }))) return;
+                try { const restored = await Api.restoreVersion(r.id!, h.id); setR(restored); setDirty(false); setVersions(null); toast('Version wiederhergestellt'); } catch (e: any) { toast(e.message, 'fehler'); }
+              }}><RotateCcw size={15} /> Wiederherstellen</button>
+            </li>
+          ))}
+          {versions && !versions.length && <li className="text-ink-soft">Noch keine früheren Fassungen – sie entstehen ab der ersten Änderung.</li>}
+        </ul>
+      </Modal>
 
       {restoreOffer && (
         <div className="card mb-6 flex flex-wrap items-center justify-between gap-3 border-apricot-300 bg-apricot-100/60 p-4">
