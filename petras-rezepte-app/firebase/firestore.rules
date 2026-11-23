@@ -1,0 +1,17 @@
+rules_version = '2';
+// Petras Rezepte App – Sicherheitsregeln für Cloud Firestore.
+// Jeder Benutzer darf ausschließlich seine eigenen Daten unter users/{seine uid}/… lesen und schreiben.
+// Alles andere ist verboten (auch für andere angemeldete Benutzer).
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid}/{collection}/{docId} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && collection in ['recipes', 'photos', 'devices', 'meta']
+        && request.resource.data.size() <= 12;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

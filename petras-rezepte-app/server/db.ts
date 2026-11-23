@@ -4,6 +4,7 @@
  * Entwürfe (automatische Zwischenspeicherung) und Einstellungen.
  */
 import { DatabaseSync } from 'node:sqlite';
+import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { dataDir } from './paths.ts';
 import { log } from './log.ts';
@@ -45,7 +46,34 @@ const MIGRATIONS: string[] = [
      data TEXT NOT NULL,
      updated_at TEXT NOT NULL);
    CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);`,
+  // v2: Synchronisierung (stabile Kennung je Rezept, Änderungsmarker, Versionsverlauf, Löschmarker)
+  `ALTER TABLE recipes ADD COLUMN uuid TEXT;
+   ALTER TABLE recipes ADD COLUMN dirty INTEGER NOT NULL DEFAULT 1;
+   ALTER TABLE recipes ADD COLUMN remote_time TEXT;
+   ALTER TABLE recipes ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
+   ALTER TABLE recipes ADD COLUMN photo_hash TEXT;
+   ALTER TABLE recipes ADD COLUMN photo_synced TEXT;
+   UPDATE recipes SET uuid = lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-a' || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6))) WHERE uuid IS NULL;
+   CREATE UNIQUE INDEX recipes_uuid ON recipes(uuid);
+   CREATE INDEX recipes_dirty ON recipes(profile_id, dirty);
+   CREATE TABLE recipe_history (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     profile_id INTEGER NOT NULL,
+     uuid TEXT NOT NULL,
+     data TEXT NOT NULL,
+     saved_at TEXT NOT NULL,
+     reason TEXT NOT NULL);
+   CREATE INDEX history_uuid ON recipe_history(uuid, id);
+   CREATE TABLE tombstones (uuid TEXT PRIMARY KEY, profile_id INTEGER NOT NULL, at TEXT NOT NULL);`,
 ];
+
+/** Wird bei jeder lokalen Änderung aufgerufen (die Synchronisierung hängt sich hier ein). */
+let changeListener: ((profileId: number) => void) | null = null;
+export function onLocalChange(fn: ((profileId: number) => void) | null): void { changeListener = fn; }
+const changed = (profileId: number) => { try { changeListener?.(profileId); } catch { /* egal */ } };
+
+export const photoHash = (photo: string | null | undefined): string | null =>
+  photo ? createHash('sha256').update(photo).digest('hex') : null;
 
 export function openDb(path = dbPath()): DatabaseSync {
   if (db) return db;
@@ -119,9 +147,12 @@ function summary(row: Record<string, unknown>): RecipeSummary {
     totalTime: data.totalTime ?? ((data.prepTime ?? 0) + (data.cookTime ?? 0) + (data.restTime ?? 0) || null),
     servings: data.servings, cookidooStatus: row.cookidoo_status as RecipeSummary['cookidooStatus'],
     updatedAt: String(row.updated_at), createdAt: String(row.created_at),
+    conflict: !!data.conflict,
   };
 }
 
+export const fingerprintOf = (r: Recipe) => fingerprint(r);
+export const searchOf = (r: Recipe) => searchText(r);
 function searchText(r: Recipe): string {
   return norm([r.title, r.description, r.category, r.notes, ...r.ingredients.map((i) => i.name), ...r.steps.map((s) => s.text)].join(' '));
 }
@@ -171,7 +202,34 @@ function rowById(profileId: number, id: number, includeDeleted = false) {
 export function getRecipe(profileId: number, id: number): Recipe {
   const row = rowById(profileId, id);
   const r = JSON.parse(String(row.data)) as Recipe;
-  return { ...r, id: Number(row.id), favorite: Boolean(row.favorite), createdAt: String(row.created_at), updatedAt: String(row.updated_at) };
+  return { ...r, id: Number(row.id), uuid: String(row.uuid), favorite: Boolean(row.favorite), createdAt: String(row.created_at), updatedAt: String(row.updated_at) };
+}
+
+export function findByUuid(profileId: number, uuid: string): number | null {
+  const r = openDb().prepare('SELECT id FROM recipes WHERE uuid = ? AND profile_id = ? AND deleted_at IS NULL').get(uuid, profileId) as { id: number } | undefined;
+  return r ? Number(r.id) : null;
+}
+
+// ---------------- Versionsverlauf ----------------
+const HISTORY_KEEP = 30;
+export function addHistory(profileId: number, uuid: string, data: string, reason: string): void {
+  const d = openDb();
+  const last = d.prepare('SELECT data FROM recipe_history WHERE uuid = ? ORDER BY id DESC LIMIT 1').get(uuid) as { data: string } | undefined;
+  if (last?.data === data) return; // keine doppelten Einträge
+  d.prepare('INSERT INTO recipe_history (profile_id, uuid, data, saved_at, reason) VALUES (?,?,?,?,?)').run(profileId, uuid, data, now(), reason);
+  d.prepare('DELETE FROM recipe_history WHERE uuid = ? AND id NOT IN (SELECT id FROM recipe_history WHERE uuid = ? ORDER BY id DESC LIMIT ?)').run(uuid, uuid, HISTORY_KEEP);
+}
+export function listHistory(profileId: number, id: number): { id: number; savedAt: string; reason: string; title: string }[] {
+  const row = rowById(profileId, id, true);
+  return (openDb().prepare('SELECT id, saved_at, reason, data FROM recipe_history WHERE uuid = ? AND profile_id = ? ORDER BY id DESC').all(String(row.uuid), profileId) as Record<string, unknown>[])
+    .map((h) => ({ id: Number(h.id), savedAt: String(h.saved_at), reason: String(h.reason), title: String((JSON.parse(String(h.data)) as Recipe).title ?? '') }));
+}
+export function restoreHistory(profileId: number, id: number, historyId: number): Recipe {
+  const row = rowById(profileId, id);
+  const h = openDb().prepare('SELECT data FROM recipe_history WHERE id = ? AND uuid = ? AND profile_id = ?').get(historyId, String(row.uuid), profileId) as { data: string } | undefined;
+  if (!h) throw Object.assign(new Error('Version nicht gefunden.'), { status: 404 });
+  const old = JSON.parse(h.data) as Recipe;
+  return saveRecipe(profileId, { ...old, id, favorite: Boolean(row.favorite) }, 'vor Wiederherstellung');
 }
 
 export function findDuplicates(profileId: number, r: Pick<Recipe, 'title' | 'ingredients'>, exceptId?: number | null): RecipeSummary[] {
@@ -183,20 +241,27 @@ export function findDuplicates(profileId: number, r: Pick<Recipe, 'title' | 'ing
     .map(summary);
 }
 
-export function saveRecipe(profileId: number, input: Recipe): Recipe {
+/** Gespeicherte Form eines Rezepts (ohne lokale Nummer/Zeitstempel) */
+export const recipeData = (r: Recipe) => JSON.stringify({ ...r, id: undefined, uuid: undefined, createdAt: undefined, updatedAt: undefined });
+
+export function saveRecipe(profileId: number, input: Recipe, historyReason = 'gespeichert'): Recipe {
   const r = sanitizeRecipe(input, profileId);
   const d = openDb();
   const t = now();
-  const data = JSON.stringify({ ...r, id: undefined, createdAt: undefined, updatedAt: undefined });
-  const cols = [r.title, r.category, r.favorite ? 1 : 0, fingerprint(r), searchText(r), r.cookidoo?.status ?? 'offen', data];
+  const data = recipeData(r);
+  const cols = [r.title, r.category, r.favorite ? 1 : 0, fingerprint(r), searchText(r), r.cookidoo?.status ?? 'offen', data, photoHash(r.photo)];
   if (r.id) {
-    rowById(profileId, r.id);
-    d.prepare('UPDATE recipes SET title=?, category=?, favorite=?, fingerprint=?, search=?, cookidoo_status=?, data=?, updated_at=? WHERE id=? AND profile_id=?')
+    const old = rowById(profileId, r.id);
+    if (String(old.data) === data) return getRecipe(profileId, r.id); // nichts geändert
+    addHistory(profileId, String(old.uuid), String(old.data), historyReason);
+    d.prepare('UPDATE recipes SET title=?, category=?, favorite=?, fingerprint=?, search=?, cookidoo_status=?, data=?, photo_hash=?, updated_at=?, dirty=1, version=version+1 WHERE id=? AND profile_id=?')
       .run(...cols, t, r.id, profileId);
+    changed(profileId);
     return getRecipe(profileId, r.id);
   }
-  const res = d.prepare('INSERT INTO recipes (profile_id, title, category, favorite, fingerprint, search, cookidoo_status, data, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
-    .run(profileId, ...cols, t, t);
+  const res = d.prepare('INSERT INTO recipes (profile_id, title, category, favorite, fingerprint, search, cookidoo_status, data, photo_hash, created_at, updated_at, uuid, dirty) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)')
+    .run(profileId, ...cols, t, t, randomUUID());
+  changed(profileId);
   return getRecipe(profileId, Number(res.lastInsertRowid));
 }
 
@@ -207,14 +272,23 @@ export function setFavorite(profileId: number, id: number, favorite: boolean): v
 
 export function deleteRecipe(profileId: number, id: number): void {
   rowById(profileId, id);
-  openDb().prepare('UPDATE recipes SET deleted_at = ? WHERE id = ? AND profile_id = ?').run(now(), id, profileId);
+  openDb().prepare('UPDATE recipes SET deleted_at = ?, dirty = 1, updated_at = ? WHERE id = ? AND profile_id = ?').run(now(), now(), id, profileId);
+  changed(profileId);
 }
 export function restoreRecipe(profileId: number, id: number): void {
   rowById(profileId, id, true);
-  openDb().prepare('UPDATE recipes SET deleted_at = NULL WHERE id = ? AND profile_id = ?').run(id, profileId);
+  openDb().prepare('UPDATE recipes SET deleted_at = NULL, dirty = 1, updated_at = ? WHERE id = ? AND profile_id = ?').run(now(), id, profileId);
+  changed(profileId);
 }
 export function purgeRecipe(profileId: number, id: number): void {
-  openDb().prepare('DELETE FROM recipes WHERE id = ? AND profile_id = ? AND deleted_at IS NOT NULL').run(id, profileId);
+  const d = openDb();
+  const row = d.prepare('SELECT uuid, remote_time FROM recipes WHERE id = ? AND profile_id = ? AND deleted_at IS NOT NULL').get(id, profileId) as { uuid: string; remote_time: string | null } | undefined;
+  if (!row) return;
+  // Bereits in der Cloud? Dann einen Löschmarker merken, damit es auch dort endgültig entfernt wird.
+  if (row.remote_time) d.prepare('INSERT OR REPLACE INTO tombstones (uuid, profile_id, at) VALUES (?,?,?)').run(row.uuid, profileId, now());
+  d.prepare('DELETE FROM recipes WHERE id = ? AND profile_id = ?').run(id, profileId);
+  d.prepare('DELETE FROM recipe_history WHERE uuid = ?').run(row.uuid);
+  changed(profileId);
 }
 export function listTrash(profileId: number): RecipeSummary[] {
   return (openDb().prepare('SELECT * FROM recipes WHERE profile_id = ? AND deleted_at IS NOT NULL ORDER BY deleted_at DESC').all(profileId) as Record<string, unknown>[]).map(summary);
@@ -222,12 +296,13 @@ export function listTrash(profileId: number): RecipeSummary[] {
 /** Papierkorb nach 30 Tagen leeren */
 export function cleanupTrash(days = 30): void {
   const cutoff = new Date(Date.now() - days * 86400_000).toISOString();
-  openDb().prepare('DELETE FROM recipes WHERE deleted_at IS NOT NULL AND deleted_at < ?').run(cutoff);
+  const rows = openDb().prepare('SELECT id, profile_id FROM recipes WHERE deleted_at IS NOT NULL AND deleted_at < ?').all(cutoff) as { id: number; profile_id: number }[];
+  for (const r of rows) purgeRecipe(Number(r.profile_id), Number(r.id));
 }
 
 export function duplicateRecipe(profileId: number, id: number): Recipe {
   const r = getRecipe(profileId, id);
-  return saveRecipe(profileId, { ...r, id: null, title: `${r.title} (Kopie)`, favorite: false, cookidoo: { status: 'offen' } });
+  return saveRecipe(profileId, { ...r, id: null, title: `${r.title} (Kopie)`, favorite: false, cookidoo: { status: 'offen' }, conflict: null });
 }
 
 export function stats(profileId: number) {
@@ -293,9 +368,10 @@ export function updateSettings(profileId: number, patch: Partial<Settings>): Set
   for (let [k, v] of Object.entries(patch)) {
     if (!(k in DEFAULT_SETTINGS) || typeof v !== typeof DEFAULT_SETTINGS[k as keyof Settings]) continue;
     if (k === 'cookidooUrl' && !/^https:\/\/cookidoo\.[a-z.]+\//i.test(String(v))) continue;
-    if (k === 'categories') v = cleanCategories(v);
+    if (k === 'categories') { v = cleanCategories(v); setMeta(`categoriesChanged:${profileId}`, now()); }
     d.prepare('INSERT INTO settings (profile_id, key, value) VALUES (?, ?, ?) ON CONFLICT(profile_id, key) DO UPDATE SET value = excluded.value')
       .run(profileId, k, JSON.stringify(v));
+    if (k === 'categories') changed(profileId);
   }
   return getSettings(profileId);
 }
@@ -315,7 +391,8 @@ export function renameCategory(profileId: number, from: string, to: string): num
   for (const { id } of rows) {
     const row = rowById(profileId, Number(id), true);
     const data = { ...JSON.parse(String(row.data)), category: target };
-    openDb().prepare('UPDATE recipes SET category = ?, data = ?, updated_at = ? WHERE id = ?').run(target, JSON.stringify(data), now(), id);
+    addHistory(profileId, String(row.uuid), String(row.data), 'Kategorie geändert');
+    openDb().prepare('UPDATE recipes SET category = ?, data = ?, updated_at = ?, dirty = 1 WHERE id = ?').run(target, JSON.stringify(data), now(), id);
   }
   const s = getSettings(profileId);
   const list = s.categories.map((c) => (c === from ? target : c));

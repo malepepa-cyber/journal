@@ -10,6 +10,8 @@ import { bookmarkletSource } from './bookmarklet.ts';
 import { fetchRecipePage, fetchImage, FetchError } from './fetch-url.ts';
 import { openExternal } from './launcher.ts';
 import type { Recipe } from '../shared/model.ts';
+import * as sync from './sync/engine.ts';
+import { SyncError } from './sync/firebase.ts';
 
 export class HttpError extends Error { constructor(public status: number, message: string) { super(message); } }
 
@@ -106,6 +108,24 @@ route('GET', '/api/trash', ({ profileId }) => db.listTrash(profileId));
 route('POST', '/api/trash/:id/restore', ({ profileId, params }) => { db.restoreRecipe(profileId, id(params)); return { ok: true }; });
 route('DELETE', '/api/trash/:id', ({ profileId, params }) => { db.purgeRecipe(profileId, id(params)); return { ok: true }; });
 
+// ---------- Versionsverlauf & Konflikte ----------
+route('GET', '/api/recipes/:id/history', ({ profileId, params }) => db.listHistory(profileId, id(params)));
+route('POST', '/api/recipes/:id/history/:hid/restore', ({ profileId, params }) => {
+  const hid = Number(params.hid); if (!Number.isInteger(hid) || hid <= 0) throw new HttpError(400, 'Ungültige Version.');
+  return db.restoreHistory(profileId, id(params), hid);
+});
+/** Konflikt-Kopie behalten: ersetzt die andere Fassung (die landet im Versionsverlauf), die Kopie verschwindet */
+route('POST', '/api/recipes/:id/conflict/keep', ({ profileId, params }) => {
+  const copy = db.getRecipe(profileId, id(params));
+  if (!copy.conflict) throw new HttpError(400, 'Das ist keine Konflikt-Kopie.');
+  const title = copy.title.replace(/ \(Konflikt-Kopie[^)]*\)$/, '');
+  const original = db.findByUuid(profileId, copy.conflict.of);
+  if (!original) return db.saveRecipe(profileId, { ...copy, title, conflict: null });
+  const saved = db.saveRecipe(profileId, { ...copy, id: original, title, conflict: null }, 'durch Konflikt-Kopie ersetzt');
+  db.deleteRecipe(profileId, copy.id!);
+  return saved;
+});
+
 // ---------- Export / Import ----------
 route('GET', '/api/export', ({ profileId, query, res }) => {
   const ids = query.get('ids')?.split(',').map(Number).filter(Boolean);
@@ -165,7 +185,45 @@ route('POST', '/api/ai/review', async ({ profileId, body }) => {
 // ---------- Sicherungen ----------
 route('GET', '/api/backups', () => listBackups());
 route('POST', '/api/backups', () => createBackup('manuell'));
-route('POST', '/api/backups/restore', async ({ body }) => { restoreBackup(String((await body()).name ?? '')); return { ok: true }; });
+route('POST', '/api/backups/restore', async ({ body }) => { restoreBackup(String((await body()).name ?? '')); sync.resetCursor(); return { ok: true }; });
+
+// ---------- Synchronisierung (Geräte und Synchronisierung) ----------
+const syncCall = async <T>(fn: () => Promise<T> | T): Promise<T> => {
+  try { return await fn(); } catch (e) {
+    if (e instanceof SyncError) throw new HttpError(e.kind === 'offline' ? 503 : e.kind === 'conflict' ? 409 : e.kind === 'notfound' ? 404 : 400, e.message);
+    throw e;
+  }
+};
+const creds = (b: any) => {
+  const email = String(b.email ?? '').trim(); const password = String(b.password ?? '');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, 'Bitte eine gültige E-Mail-Adresse eingeben.');
+  if (!password) throw new HttpError(400, 'Bitte das Passwort eingeben.');
+  return { email, password };
+};
+route('GET', '/api/sync/status', () => sync.status());
+route('PUT', '/api/sync/config', async ({ body }) => syncCall(async () => {
+  const b = await body();
+  if (sync.status().signedIn) throw new SyncError('Bitte zuerst abmelden.', 'config');
+  if (b.code) sync.applyConnectCode(String(b.code)); else sync.setConfig({ apiKey: b.apiKey, projectId: b.projectId, emulator: b.emulator ?? null });
+  return sync.status();
+}));
+route('DELETE', '/api/sync/config', () => syncCall(() => {
+  if (sync.status().signedIn) throw new SyncError('Bitte zuerst abmelden.', 'config');
+  sync.setConfig(null); return sync.status();
+}));
+route('GET', '/api/sync/code', () => ({ code: sync.connectCode() }));
+route('POST', '/api/sync/register', async ({ body, profileId }) => syncCall(async () => { const c = creds(await body()); await sync.register(c.email, c.password, profileId); return sync.status(); }));
+route('POST', '/api/sync/login', async ({ body, profileId }) => syncCall(async () => { const c = creds(await body()); await sync.login(c.email, c.password, profileId); return sync.status(); }));
+route('POST', '/api/sync/reset', async ({ body }) => syncCall(async () => {
+  const email = String((await body()).email ?? '').trim();
+  if (!email) throw new HttpError(400, 'Bitte die E-Mail-Adresse eingeben.');
+  await sync.resetPassword(email); return { ok: true };
+}));
+route('POST', '/api/sync/logout', () => { sync.logout(); return sync.status(); });
+route('POST', '/api/sync/now', () => syncCall(async () => { await sync.syncNow().catch((e) => { if (!(e instanceof SyncError)) throw e; }); return sync.status(); }));
+route('GET', '/api/sync/devices', () => syncCall(() => sync.listDevices()));
+route('DELETE', '/api/sync/devices/:dev', ({ params }) => syncCall(async () => { await sync.removeDevice(params.dev); return { ok: true }; }));
+route('PUT', '/api/sync/device-name', async ({ body }) => { sync.setDeviceName(String((await body()).name ?? '')); sync.syncNow().catch(() => {}); return sync.status(); });
 
 // ---------- Rezeptseite per Link abrufen (nur öffentliche Seiten) ----------
 route('POST', '/api/fetch-url', async ({ body }) => {

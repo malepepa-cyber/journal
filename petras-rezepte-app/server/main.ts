@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { handleApi, HttpError, lastHeartbeat, shutdownRequested } from './api.ts';
 import { readAsset, isPackaged } from './assets.ts';
 import { autoBackupIfDue } from './backup.ts';
+import { startSync, stopSync, syncNow, status as syncStatus } from './sync/engine.ts';
 import { cleanupTrash, closeDb, getSettings, currentProfileId, openDb } from './db.ts';
 import { openApp } from './launcher.ts';
 import { log } from './log.ts';
@@ -107,9 +108,15 @@ async function main() {
   log('info', `Petras Rezepte App ${APP_VERSION} gestartet auf Port ${port}`);
   if (DEV || !isPackaged()) console.log(`\n  Petras Rezepte App läuft:  ${appUrl(port, SESSION_TOKEN)}\n`);
   if (!NO_BROWSER) openApp(appUrl(port, SESSION_TOKEN));
+  startSync();
 
-  const stop = (why: string) => {
+  let stopping = false;
+  const stop = async (why: string) => {
+    if (stopping) return; stopping = true;
     log('info', `Beende (${why})`);
+    // Letzte Änderungen noch übertragen (höchstens 8 Sekunden)
+    if (syncStatus().signedIn && syncStatus().pending) await Promise.race([syncNow().catch(() => {}), new Promise((r) => setTimeout(r, 8000))]);
+    stopSync();
     try { rmSync(LOCK(), { force: true }); } catch { /* egal */ }
     server.close(); closeDb();
     setTimeout(() => process.exit(0), 300).unref();

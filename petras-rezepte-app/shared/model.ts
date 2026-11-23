@@ -129,6 +129,10 @@ export interface Recipe {
   };
   /** Alternative Schrittfassung (z. B. Originaltext der Seite, wenn die Schritte aus dem Kochmodus stammen) */
   altSteps?: { label: string; steps: Step[] } | null;
+  /** Gesetzt, wenn dies eine Konflikt-Kopie ist (gleichzeitige Änderung auf zwei Geräten) */
+  conflict?: { of: string; device: string; at: string } | null;
+  /** Geräteübergreifende Kennung (für die Synchronisierung) */
+  uuid?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -144,6 +148,7 @@ export interface RecipeSummary {
   cookidooStatus: CookidooStatus;
   updatedAt: string;
   createdAt: string;
+  conflict?: boolean;
 }
 
 export interface Profile { id: number; name: string; createdAt: string }
