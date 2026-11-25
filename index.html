@@ -172,7 +172,7 @@ async function decryptBlob(key, blob) {
 
 /* ====================== Zustand ====================== */
 const S = { unlocked: false, data: null, key: null, salt: null, pin: null, tab: 'home', sync: { state: 'off', msg: '' }, filter: { q: '', st: 'Alle', sort: 'dateDesc', yr: 'Alle' }, imp: [], lastAct: Date.now() };
-const emptyData = () => ({ app: 'aktien-journal', v: 1, trades: [], plans: [], belege: [], settings: { crv: 2, u: 0 } });
+const emptyData = () => ({ app: 'aktien-journal', v: 2, trades: [], plans: [], belege: [], tx: [], cur: {}, pk: '', settings: { crv: 2, u: 0 } });
 const live = a => a.filter(x => !x.del);
 const cfg = { get clientId() { return localStorage.getItem('clientId') || CLIENT_ID_DEFAULT || ''; }, set clientId(v) { localStorage.setItem('clientId', v.trim()); } };
 
@@ -192,7 +192,84 @@ function enrich(t) {
   o.unreal = (!o.closed && t.cur > 0 && o.inv != null) ? q * t.cur - o.inv : null;
   return o;
 }
-const trades = () => live(S.data.trades).map(enrich);
+
+/* ====================== Bestandsführung aus Transaktionen ======================
+   Quelle der Wahrheit für neue Käufe/Verkäufe ist das Transaktionsjournal (S.data.tx).
+   Bestand, Ø-Einstand und realisierte Trades werden daraus bei jedem Aufruf neu berechnet.
+   Ältere Trades (Excel-Übernahme / manuell) bleiben unverändert. Offene Altpositionen einer Aktie
+   mit Transaktionen bilden deren Anfangsbestand. */
+const dayOf = d => Date.parse(d + 'T12:00:00Z') / 864e5;
+const dayStr = n => new Date(Math.round(n) * 864e5).toISOString().slice(0, 10);
+const normName = s => (s || '').toLowerCase().replace(/[^a-z0-9äöüß]/g, '');
+function stockResolver(items) {
+  const n2i = new Map();
+  for (const x of items) if (x.isin && x.name) n2i.set(normName(x.name), x.isin);
+  const names = [...n2i.keys()];
+  return x => {
+    if (x.isin) return 'i:' + x.isin;
+    const n = normName(x.name);
+    if (n2i.has(n)) return 'i:' + n2i.get(n);
+    if (n.length > 3) for (const k of names) if (k.length > 3 && (k.startsWith(n) || n.startsWith(k))) return 'i:' + n2i.get(k);
+    return 'n:' + n;
+  };
+}
+const cmpTx = (a, b) => (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || '') || ((a.art === 'Kauf' ? 0 : 1) - (b.art === 'Kauf' ? 0 : 1)) || String(a.id).localeCompare(String(b.id));
+function replay(extra = []) {
+  const txs = live(S.data.tx).concat(extra), legacy = live(S.data.trades);
+  const R = stockResolver([...legacy, ...txs]);
+  const out = { gen: [], snaps: {}, errors: {}, absorbed: new Set(), R };
+  const by = new Map();
+  for (const t of txs) { const k = R(t); if (!by.has(k)) by.set(k, []); by.get(k).push(t); }
+  for (const [k, list] of by) {
+    list.sort(cmpTx);
+    const P = { qty: 0, cost: 0, fees: 0, dw: 0 };
+    let name = list[0].name, isin = '';
+    for (const l of legacy) if (!(l.outDate && l.outPrice > 0) && R(l) === k) {
+      out.absorbed.add(l.id);
+      const q = +l.qty || 0;
+      P.qty += q; P.cost += q * (+l.inPrice || 0); P.fees += +l.fee || 0; P.dw += q * dayOf(l.inDate || list[0].date);
+      name = l.name; if (l.isin) isin = l.isin;
+    }
+    for (const t of list) {
+      const q = +t.qty || 0, px = +t.price || 0, f = +t.fee || 0, tax = (+t.kest || 0) + (+t.kist || 0) + (+t.soli || 0);
+      const avg0 = P.qty > 1e-9 ? P.cost / P.qty : 0;
+      const before = { qty: P.qty, avg: avg0, cost: P.cost, fees: P.fees };
+      if (t.art === 'Kauf') {
+        P.qty += q; P.cost += q * px; P.fees += f + tax; P.dw += q * dayOf(t.date);
+        out.snaps[t.id] = { before, after: { qty: P.qty, avg: P.cost / P.qty, cost: P.cost, fees: P.fees } };
+      } else {
+        if (q > P.qty + 1e-9) { out.errors[t.id] = `Verkauf von ${qf(q)} Stück nicht möglich: Es sind nur ${qf(P.qty)} Stück ${t.name || ''} im Bestand (${fdate(t.date)}). Der Aktienbestand darf nicht negativ werden.`; continue; }
+        const share = q / P.qty, buyFee = P.fees * share, dAvg = P.dw / P.qty;
+        out.gen.push({ id: 'g' + t.id, src: 'tx', txid: t.id, name: t.name || name, isin: t.isin || isin, inDate: dayStr(dAvg), qty: q, inPrice: avg0, outDate: t.date, outPrice: px, cur: null, fee: buyFee + f, kest: +t.kest || 0, kist: +t.kist || 0, soli: +t.soli || 0, u: t.u || 0 });
+        P.qty -= q; P.cost -= q * avg0; P.fees -= buyFee; P.dw -= q * dAvg;
+        if (P.qty < 1e-9) { P.qty = 0; P.cost = 0; P.fees = 0; P.dw = 0; }
+        const gross = (px - avg0) * q;
+        out.snaps[t.id] = { before, after: { qty: P.qty, avg: P.qty ? P.cost / P.qty : 0, cost: P.cost, fees: P.fees }, gross, buyFee, net: gross - buyFee - f - tax };
+      }
+      name = t.name || name; if (t.isin) isin = t.isin;
+    }
+    if (P.qty > 1e-9) out.gen.push({ id: 'gp:' + k, src: 'pos', name, isin, inDate: dayStr(P.dw / P.qty), qty: P.qty, inPrice: P.cost / P.qty, outDate: '', outPrice: null, cur: null, fee: P.fees, kest: 0, kist: 0, soli: 0, u: 0 });
+  }
+  return out;
+}
+function allRaw() {
+  const rp = replay(); S._rp = rp;
+  const cm = S.data.cur || {};
+  const legacy = live(S.data.trades).filter(t => !rp.absorbed.has(t.id));
+  return [...legacy, ...rp.gen].map(t => { if (t.outDate && t.outPrice > 0) return t; const c = cm[rp.R(t)]; return c && c.p > 0 ? { ...t, cur: c.p } : t; });
+}
+const trades = () => allRaw().map(enrich);
+function setCur(key, p) {
+  S.data.cur = S.data.cur || {};
+  S.data.cur[key] = { p: p > 0 ? p : 0, u: Date.now() };
+  if (!(p > 0)) for (const t of S.data.trades) if (!t.del && S._rp.R(t) === key && t.cur) { t.cur = null; t.u = Date.now(); }
+}
+function validateLedger(newTx) {
+  const saved = S.data.tx; S.data.tx = newTx;
+  let rp; try { rp = replay(); } finally { S.data.tx = saved; }
+  const e = Object.values(rp.errors); return e.length ? e[0] : null;
+}
+
 const sum = (a, f) => a.reduce((s, x) => s + (f(x) || 0), 0);
 const avg = a => a.length ? a.reduce((s, x) => s + x, 0) / a.length : null;
 function stats() {
@@ -276,17 +353,17 @@ async function gfetch(url, opt = {}, interactive = false) {
   if (!r.ok) throw new Error('Google Drive: HTTP ' + r.status + ' ' + (await r.text()).slice(0, 160));
   return r;
 }
-async function driveFind(interactive) {
-  const q = encodeURIComponent(`name='${DRIVE_FILE}'`);
+async function driveFind(interactive, fname = DRIVE_FILE) {
+  const q = encodeURIComponent(`name='${fname}'`);
   const r = await gfetch(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id,modifiedTime)&orderBy=modifiedTime desc`, {}, interactive);
   return (await r.json()).files?.[0] || null;
 }
 const driveGet = async id => (await gfetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`)).json();
-async function drivePut(blob, id) {
+async function drivePut(blob, id, fname = DRIVE_FILE) {
   const body = JSON.stringify(blob);
   if (id) return (await gfetch(`https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body })).json();
   const bd = 'jb' + uid();
-  const multipart = `--${bd}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name: DRIVE_FILE, parents: ['appDataFolder'] })}\r\n--${bd}\r\nContent-Type: application/json\r\n\r\n${body}\r\n--${bd}--`;
+  const multipart = `--${bd}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name: fname, parents: ['appDataFolder'] })}\r\n--${bd}\r\nContent-Type: application/json\r\n\r\n${body}\r\n--${bd}--`;
   return (await gfetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + bd }, body: multipart })).json();
 }
 function mergeLists(a, b) {
@@ -294,8 +371,13 @@ function mergeLists(a, b) {
   for (const x of [...a, ...b]) { const o = m.get(x.id); if (!o || (x.u || 0) > (o.u || 0)) m.set(x.id, x); }
   return [...m.values()];
 }
+function mergeCur(a, b) {
+  const o = { ...(a || {}) };
+  for (const [k, v] of Object.entries(b || {})) if (!o[k] || (v.u || 0) > (o[k].u || 0)) o[k] = v;
+  return o;
+}
 function mergeData(l, r) {
-  return { app: 'aktien-journal', v: 1, trades: mergeLists(l.trades || [], r.trades || []), plans: mergeLists(l.plans || [], r.plans || []), belege: mergeLists(l.belege || [], r.belege || []), settings: (r.settings?.u || 0) > (l.settings?.u || 0) ? r.settings : l.settings };
+  return { app: 'aktien-journal', v: 2, trades: mergeLists(l.trades || [], r.trades || []), plans: mergeLists(l.plans || [], r.plans || []), belege: mergeLists(l.belege || [], r.belege || []), tx: mergeLists(l.tx || [], r.tx || []), cur: mergeCur(l.cur, r.cur), pk: r.pk || l.pk || '', settings: (r.settings?.u || 0) > (l.settings?.u || 0) ? r.settings : (l.settings || r.settings) };
 }
 let syncTimer, syncing = false;
 function scheduleSync() { clearTimeout(syncTimer); if (localStorage.getItem('driveLinked') && S.unlocked) syncTimer = setTimeout(() => sync(false), 2000); }
@@ -319,6 +401,7 @@ async function sync(interactive = false) {
     await drivePut(out, f?.id);
     await idb.set('blob', out);
     S.dirty = false;
+    await uploadPdfs().catch(() => { });
     setSync('ok', new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }));
     render();
   } catch (e) { setSync('err', e.message || String(e)); if (interactive) alert(e.message || e); }
@@ -357,7 +440,7 @@ async function bioUnlock() {
   const data = await decryptBlob(b.key, blob);
   S.key = b.key; S.salt = blob.salt; S.data = normalize(data); S.pin = null; S.unlocked = true;
 }
-function normalize(d) { d = d || {}; return { app: 'aktien-journal', v: 1, trades: d.trades || [], plans: d.plans || [], belege: d.belege || [], settings: d.settings || { crv: 2, u: 0 } }; }
+function normalize(d) { d = d || {}; return { app: 'aktien-journal', v: 2, trades: d.trades || [], plans: d.plans || [], belege: d.belege || [], tx: d.tx || [], cur: d.cur || {}, pk: d.pk || '', settings: d.settings || { crv: 2, u: 0 } }; }
 
 /* ====================== Sperrbildschirm ====================== */
 let lockMode = null, lockMsg = '';
@@ -405,7 +488,7 @@ async function renderLock(msg) {
   L('resetBtn') && (L('resetBtn').onclick = () => { lockMode = 'reset'; renderLock(); });
   L('resetGo') && (L('resetGo').onclick = async () => { await idb.del('blob'); await idb.del('bio'); localStorage.removeItem('driveLinked'); lockMode = null; renderLock(); });
   const fail = () => { const f = (+localStorage.getItem('pinFails') || 0) + 1; localStorage.setItem('pinFails', f); if (f >= 5) { localStorage.setItem('pinUntil', Date.now() + Math.min(600, 30 * 2 ** (f - 5)) * 1000); } const c = $('.lockcard'); c.classList.remove('shake'); void c.offsetWidth; c.classList.add('shake'); setMsg(f >= 5 ? 'Zu viele Versuche – bitte warten.' : 'Falsche PIN'); L('pin').value = ''; };
-  const done = () => { localStorage.removeItem('pinFails'); localStorage.removeItem('pinUntil'); S.unlocked = true; S.lastAct = Date.now(); render(); if (localStorage.getItem('driveLinked')) sync(false); };
+  const done = () => { localStorage.removeItem('pinFails'); localStorage.removeItem('pinUntil'); S.unlocked = true; S.lastAct = Date.now(); if (!S.data.pk) { ensurePk(); commit(false); } render(); if (localStorage.getItem('driveLinked')) sync(false); };
   if (hasBlob && lockMode !== 'reset' && L('pin')) {
     const pin = L('pin'); pin.focus();
     pin.oninput = async () => {
@@ -459,6 +542,7 @@ function modal(html, onReady) {
 }
 const inp = (id, label, val, o = {}) => `<label class="${o.w ? 'w' : ''}">${label}<input id="${id}" ${o.type ? `type="${o.type}"` : 'type="text" inputmode="decimal"'} value="${esc(val ?? '')}" ${o.list ? `list="${o.list}"` : ''} ${o.ph ? `placeholder="${o.ph}"` : ''} ${o.cls ? `class="${o.cls}"` : ''} autocomplete="off"></label>`;
 function tradeForm(id) {
+  if (id && !S.data.trades.find(x => x.id === id)) return genInfo(id);
   const t = id ? S.data.trades.find(x => x.id === id) : { id: null, name: '', isin: '', inDate: today(), qty: '', inPrice: '', outDate: '', outPrice: '', cur: '', fee: '', kest: '', kist: '', soli: '' };
   const names = [...new Set(live(S.data.trades).map(x => x.name))].sort();
   modal(`<form><h3>${id ? 'Trade bearbeiten' : 'Neuer Trade'}</h3>
@@ -483,7 +567,9 @@ function tradeForm(id) {
       if ((r.outDate && !r.outPrice) || (!r.outDate && r.outPrice)) return alert('Für einen Verkauf bitte Datum UND Kurs eintragen – oder beides leer lassen.');
       if (r.outDate && r.outDate < r.inDate) return alert('Das Ausstiegsdatum liegt vor dem Einstieg.');
       r.u = Date.now();
+      const prevCur = t.cur;
       if (id) Object.assign(t, r); else { r.id = uid(); S.data.trades.push(r); }
+      allRaw(); if (r.cur > 0) setCur(S._rp.R(r), r.cur); else if (prevCur > 0) setCur(S._rp.R(r), null);
       d.close(); commit();
     };
     $('#f_del') && ($('#f_del').onclick = ev => { ev.preventDefault(); if (confirm('Diesen Trade löschen?')) { t.del = true; t.u = Date.now(); d.close(); commit(); } });
@@ -507,7 +593,7 @@ function planForm(id) {
 }
 
 /* ====================== Ansichten ====================== */
-const TABS = [['home', '▦', 'Übersicht'], ['trades', '☰', 'Trades'], ['stocks', '◔', 'Aktien'], ['plans', '✎', 'Geplant'], ['pdf', '⬆', 'PDF'], ['more', '⋯', 'Mehr']];
+const TABS = [['home', '▦', 'Übersicht'], ['trades', '☰', 'Trades'], ['stocks', '◔', 'Aktien'], ['plans', '✎', 'Geplant'], ['pdf', '⬆', 'Import'], ['more', '⋯', 'Mehr']];
 const kpi = (l, v, n, cls = '', vcls = '') => `<div class="kpi ${cls}"><div class="l">${l}</div><div class="v ${vcls}">${v}</div><div class="n">${n ?? ''}</div></div>`;
 
 function barChart(vals, labels, title) {
@@ -583,7 +669,22 @@ function viewTrades() {
     <tfoot><tr><td colspan="6" class="ttf">${a.length} Trades (${cl.length} geschlossen)</td><td class="${sc(sum(cl, t => t.net))}">${eur(sum(cl, t => t.net))}</td><td>${sum(cl, t => t.inv) ? pct(sum(cl, t => t.net) / sum(cl, t => t.inv), 2, true) : '–'}</td><td></td></tr></tfoot></table></div>
     <div class="note">Tippe eine Zeile an, um den Trade zu bearbeiten. „Netto-Rendite“ = Gewinn nach Gebühren &amp; Steuern ÷ Kaufbetrag; bei offenen Positionen steht (grau) die Kursveränderung.</div>`;
 }
-function viewStocks() {
+function depotHtml() {
+  const all = trades(), R = S._rp.R, g = new Map();
+  for (const t of all) { const k = R(t); if (!g.has(k)) g.set(k, { k, name: t.name, isin: '', open: [], closed: [] }); const o = g.get(k); if (t.isin) o.isin = t.isin; (t.closed ? o.closed : o.open).push(t); }
+  let rows = [...g.values()].map(o => {
+    const qty = sum(o.open, t => t.qty), cost = sum(o.open, t => t.inv), fees = sum(o.open, t => t.fee);
+    const cur = (o.open.find(t => t.cur > 0) || {}).cur || null, mv = cur && qty ? qty * cur : null, unreal = mv != null ? mv - cost : null, real = sum(o.closed, t => t.net);
+    return { ...o, qty, cost, fees, avg: qty ? cost / qty : null, cur, mv, unreal, real, total: (unreal || 0) + real };
+  }).filter(r => r.qty > 1e-9 || S.showSold).sort((a, b) => a.name.localeCompare(b.name));
+  const T = k => rows.reduce((s2, r) => s2 + (r[k] || 0), 0);
+  const body = rows.map(r => `<tr><td>${esc(r.name)}${r.isin ? '<div class="mut" style="font-size:11px">' + esc(r.isin) + '</div>' : ''}</td><td>${r.qty ? qf(r.qty) : '–'}</td><td>${r.avg ? price(r.avg) : '–'}</td><td>${r.qty ? eur(r.cost) : '–'}</td><td>${r.qty ? eur(r.cost + r.fees) : '–'}</td><td>${r.qty ? `<input class="inl" data-dcur="${esc(r.k)}" inputmode="decimal" value="${numIn(r.cur)}" placeholder="Kurs">` : ''}</td><td>${r.mv != null ? eur(r.mv) : '–'}</td><td class="${sc(r.unreal)}">${r.unreal != null ? eur(r.unreal) : '–'}</td><td class="${sc(r.real)}">${eur(r.real)}</td><td class="${sc(r.total)}"><b>${eur(r.total)}</b></td></tr>`).join('') || '<tr><td colspan="10" class="mut" style="text-align:center">Keine Bestände</td></tr>';
+  return `<h2>Depot – aktueller Bestand</h2><div class="tw"><table><thead><tr><th>Aktie</th><th>Bestand</th><th>Ø Einstand</th><th>Einstandswert</th><th>inkl. Gebühren</th><th>Aktueller Kurs</th><th>Marktwert</th><th>Offen G/V</th><th>Realisiert (netto)</th><th>Gesamt</th></tr></thead><tbody>${body}</tbody>
+  <tfoot><tr><td>Summe</td><td></td><td></td><td>${eur(T('cost'))}</td><td>${eur(T('cost') + T('fees'))}</td><td></td><td>${eur(T('mv'))}</td><td class="${sc(T('unreal'))}">${eur(T('unreal'))}</td><td class="${sc(T('real'))}">${eur(T('real'))}</td><td class="${sc(T('total'))}">${eur(T('total'))}</td></tr></tfoot></table></div>
+  <div class="note"><label><input type="checkbox" id="showSold" ${S.showSold ? 'checked' : ''}> auch vollständig verkaufte Aktien zeigen</label><br>Ø Einstand = gewichteter Durchschnitt ohne Gebühren; die Gebühren stehen separat in „inkl. Gebühren“. Offen G/V = Marktwert − Einstandswert (nur wo ein aktueller Kurs eingetragen ist). Realisiert = alle geschlossenen Trades der Aktie netto nach Gebühren &amp; Steuern.</div>`;
+}
+function viewStocks() { return depotHtml() + stocksNet(); }
+function stocksNet() {
   const g = new Map();
   for (const t of trades()) { const k = t.name; if (!g.has(k)) g.set(k, []); g.get(k).push(t); }
   const rows = [...g.entries()].map(([n, a]) => { const c = a.filter(t => t.closed), inv = sum(c, t => t.inv), net = sum(c, t => t.net), o = a.filter(t => !t.closed); return { n, cnt: c.length, win: c.filter(t => t.net > 0).length, inv, net, p: inv ? net / inv : null, days: avg(c.map(t => t.days)), open: o.length, openInv: sum(o, t => t.inv) }; }).sort((a, b) => (b.net - a.net));
@@ -596,7 +697,7 @@ function viewPlans() {
   <div class="note">„→ Trade“ legt die Position als offenen Trade an (Kurs = geplanter Einstieg) und setzt den Plan auf „Eingestiegen“. Danach den echten Kaufkurs per PDF oder von Hand nachziehen.</div>`;
 }
 
-/* ====================== PDF-Import ====================== */
+/* ====================== PDF-Import & Transaktionsjournal ====================== */
 let pdfjs;
 async function loadPdfjs() {
   if (pdfjs) return pdfjs;
@@ -605,9 +706,9 @@ async function loadPdfjs() {
   pdfjs.GlobalWorkerOptions.workerSrc = blobUrl('pdfjs-worker-b64');
   return pdfjs;
 }
-async function pdfLines(file) {
+async function pdfLines(buf) {
   const lib = await loadPdfjs();
-  const doc = await lib.getDocument({ data: await file.arrayBuffer() }).promise;
+  const doc = await lib.getDocument({ data: buf.slice(0) }).promise;
   const lines = [];
   for (let p = 1; p <= doc.numPages; p++) {
     const tc = await (await doc.getPage(p)).getTextContent();
@@ -620,15 +721,17 @@ async function pdfLines(file) {
   return lines.map(l => l.parts.sort((a, b) => a.x - b.x).map(p => p.s).join(' '));
 }
 const de = s => parseFloat(String(s).replace(/\./g, '').replace(',', '.'));
+const wknOf = i => /^DE[0-9A-Z]{10}$/.test(i || '') ? i.slice(5, 11) : '';
 function parseTR(lines) {
   const txt = lines.join('\n');
-  if (!/WERTPAPIERABRECHNUNG/i.test(txt)) throw new Error('Keine Trade-Republic-Wertpapierabrechnung (Kauf/Verkauf).');
+  if (!/WERTPAPIERABRECHNUNG/i.test(txt)) throw new Error('Keine Trade-Republic-Wertpapierabrechnung (Kauf/Verkauf) erkannt.');
   const dm = txt.match(/DATUM\s+(\d{2})\.(\d{2})\.(\d{4})/); if (!dm) throw new Error('Datum nicht gefunden.');
   const ex = (txt.match(/AUSF(?:Ü|U|UE)HRUNG\s+([0-9a-z]{4}-[0-9a-z]{4})/) || [])[1] || (txt.match(/\b([0-9a-f]{4}-[0-9a-f]{4})\b/) || [])[1] || '';
   const iO = lines.findIndex(l => /^ÜBERSICHT/i.test(l)), iP = lines.findIndex((l, i) => i > iO && /^POSITION/i.test(l));
   const ov = lines.slice(iO + 1, iP > 0 ? iP : iO + 4).join(' ');
   const art = /verkauf/i.test(ov) ? 'Verkauf' : /kauf|zeichnung|sparplan|ausführung/i.test(ov) ? 'Kauf' : null;
-  if (!art) throw new Error('Weder Kauf noch Verkauf erkannt (andere Abrechnungsart?).');
+  if (!art) throw new Error('Weder Kauf noch Verkauf erkannt (andere Abrechnungsart, z. B. Dividende?).');
+  const time = (ov.match(/um\s+(\d{2}:\d{2})/) || [])[1] || '';
   let pos = null, isin = '';
   const pi = lines.findIndex(l => /\bStk\.?\s/.test(l) || /Stk\.?$/.test(l));
   if (pi >= 0) {
@@ -638,107 +741,205 @@ function parseTR(lines) {
   }
   if (!pos) throw new Error('Position (Aktie, Stück, Preis) nicht gefunden.');
   const ia = lines.findIndex(l => /^ABRECHNUNG/i.test(l));
-  let fee = 0, kest = 0, kist = 0, soli = 0, items = [];
+  let fee = 0, kest = 0, kist = 0, soli = 0;
   if (ia >= 0) for (let i = ia + 1; i < lines.length; i++) {
     const l = lines[i]; if (/^GESAMT/i.test(l) || /^BUCHUNG/i.test(l)) break;
     const m = l.match(/^(.*?)\s+(-?[\d.]*\d,\d{2})\s*EUR$/); if (!m || /^POSITION/i.test(m[1])) continue;
     const cost = -de(m[2]), lab = m[1];
     if (/kirchensteuer/i.test(lab)) kist += cost; else if (/solidar/i.test(lab)) soli += cost; else if (/kapitalertrag|quellensteuer|steuer/i.test(lab)) kest += cost; else fee += cost;
-    items.push([lab, cost]);
   }
   const ib = lines.findIndex(l => /^BUCHUNG/i.test(l));
   let booking = null;
   if (ib >= 0) for (const l of lines.slice(ib + 1, ib + 6)) { const m = l.match(/(-?[\d.]*\d,\d{2})\s*EUR/g); if (m) { booking = de(m[m.length - 1].replace('EUR', '')); break; } }
   const px = pos.pxCur === 'EUR' ? pos.px : pos.amount / pos.qty;
-  const calc = art === 'Kauf' ? -(pos.amount + fee) : pos.amount - fee - kest - kist - soli;
-  const chk = booking == null ? 'Buchung fehlt' : Math.abs(calc - booking) < 0.015 ? 'OK' : 'Abweichung';
-  return { art, date: `${dm[3]}-${dm[2]}-${dm[1]}`, ex, name: pos.name, isin, qty: pos.qty, price: px, amount: pos.amount, fee: R2(fee), kest: R2(kest), kist: R2(kist), soli: R2(soli), booking, chk, items };
+  return { art, date: `${dm[3]}-${dm[2]}-${dm[1]}`, time, ex, name: pos.name, isin, wkn: wknOf(isin), qty: pos.qty, price: px, amount: pos.amount, fee: R2(fee), kest: R2(kest), kist: R2(kist), soli: R2(soli), booking };
 }
-function matchOpen(b) {
-  const open = live(S.data.trades).filter(t => !(t.outDate && t.outPrice > 0));
-  const byIsin = b.isin ? open.filter(t => t.isin === b.isin) : [];
-  const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9äöüß]/g, '');
-  const pool = byIsin.length ? byIsin : open.filter(t => norm(t.name) === norm(b.name) || (norm(b.name).length > 3 && (norm(b.name).startsWith(norm(t.name)) || norm(t.name).startsWith(norm(b.name)))));
-  return pool.sort((a, c) => (a.inDate || '').localeCompare(c.inDate || ''));
+function chkTx(t) {
+  if (t.booking == null || t.booking === '') return 'Buchung fehlt';
+  const fee = +t.fee || 0, tax = (+t.kest || 0) + (+t.kist || 0) + (+t.soli || 0), amt = +t.amount || 0;
+  const calc = t.art === 'Kauf' ? -(amt + fee + tax) : amt - fee - tax;
+  return Math.abs(calc - t.booking) < 0.015 ? 'OK' : 'Abweichung';
 }
-function planImport(list) {
-  // Simulation der Anwendung auf Kopie (für Vorschau): Kauf zuerst
-  const sim = JSON.parse(JSON.stringify(S.data.trades));
-  const res = [];
-  const ord = [...list].sort((a, b) => a.date.localeCompare(b.date) || (a.art === 'Kauf' ? -1 : 1) - (b.art === 'Kauf' ? -1 : 1));
-  const savedTrades = S.data.trades; S.data.trades = sim;
-  for (const b of ord) {
-    const dup = live(S.data.belege).some(x => b.ex && x.ex === b.ex) || ord.some(o => o !== b && o.ex && o.ex === b.ex && ord.indexOf(o) < ord.indexOf(b));
-    if (dup) { res.push({ b, ok: false, text: 'Beleg ist schon importiert (gleiche Ausführungs-ID) – wird übersprungen.', skip: true }); continue; }
-    if (b.art === 'Kauf') { applyBuy(b, sim); res.push({ b, ok: true, text: `Neue offene Position: ${b.qty} × ${b.name} zu ${price(b.price)} (Gebühr ${eur(b.fee)}).` }); }
-    else {
-      const r = applySell(b, sim);
-      res.push({ b, ok: r.ok, text: r.text });
-    }
-  }
-  S.data.trades = savedTrades;
-  return res;
+const DUP_MSG = 'Diese Transaktion wurde bereits importiert. Es wurden keine Änderungen am Aktienbestand vorgenommen.';
+function sameTx(a, b) {
+  return (a.ex && b.ex && a.ex === b.ex) || (a.isin && b.isin && a.isin === b.isin && a.date === b.date && a.art === b.art && Math.abs((+a.qty) - (+b.qty)) < 1e-9 && Math.abs((+a.amount) - (+b.amount)) < 0.015);
 }
-function applyBuy(b, arr) { arr.push({ id: uid(), name: b.name, isin: b.isin, inDate: b.date, qty: b.qty, inPrice: b.price, outDate: '', outPrice: null, cur: null, fee: b.fee, kest: b.kest, kist: b.kist, soli: b.soli, u: Date.now(), ex: b.ex }); }
-function applySell(b, arr) {
-  const open = arr.filter(t => !t.del && !(t.outDate && t.outPrice > 0));
-  const byIsin = b.isin ? open.filter(t => t.isin === b.isin) : [];
-  const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9äöüß]/g, '');
-  const pool = (byIsin.length ? byIsin : open.filter(t => norm(t.name) === norm(b.name) || (norm(b.name).length > 3 && (norm(b.name).startsWith(norm(t.name)) || norm(t.name).startsWith(norm(b.name)))))).sort((x, y) => (x.inDate || '').localeCompare(y.inDate || ''));
-  const avail = pool.reduce((s, t) => s + (+t.qty || 0), 0);
-  if (avail + 1e-9 < b.qty) return { ok: false, text: pool.length ? `Nur ${avail} Stück offen, verkauft wurden ${b.qty}. Bitte erst den fehlenden Kauf importieren.` : 'Keine offene Position zu dieser Aktie gefunden. Bitte zuerst die Kauf-Abrechnung importieren (oder Trade von Hand anlegen).' };
-  let rest = b.qty; const parts = [];
-  for (const t of pool) {
-    if (rest <= 1e-9) break;
-    const q = +t.qty, take = Math.min(q, rest), share = take / b.qty;
-    const sellFee = R2(b.fee * share), k = R2(b.kest * share), ki = R2(b.kist * share), so = R2(b.soli * share);
-    if (take < q - 1e-9) {
-      const frac = take / q;
-      const closedPart = { ...t, id: uid(), qty: take, fee: R2((+t.fee || 0) * frac) + sellFee, kest: (+t.kest || 0) * frac + k, kist: (+t.kist || 0) * frac + ki, soli: (+t.soli || 0) * frac + so, outDate: b.date, outPrice: b.price, cur: null, u: Date.now() };
-      t.qty = q - take; t.fee = R2((+t.fee || 0) * (1 - frac)); t.u = Date.now();
-      arr.push(closedPart); parts.push(`${take} Stück (geteilt, Rest ${t.qty} bleibt offen)`);
-    } else {
-      t.outDate = b.date; t.outPrice = b.price; t.fee = R2((+t.fee || 0) + sellFee); t.kest = R2((+t.kest || 0) + k); t.kist = R2((+t.kist || 0) + ki); t.soli = R2((+t.soli || 0) + so); t.cur = null; t.u = Date.now();
-      parts.push(`${take} Stück (Einstieg ${fdate(t.inDate)})`);
-    }
-    rest -= take;
-  }
-  return { ok: true, text: 'Schließt: ' + parts.join(' + ') + '.' };
+function isDup(t, pendBefore) {
+  return live(S.data.tx).some(o => sameTx(o, t)) || live(S.data.belege).some(b => t.ex && b.ex === t.ex) || pendBefore.some(p => sameTx(p, t));
 }
-function viewPdf() {
-  const imp = S.imp;
-  return `<h2>PDF-Abrechnung einlesen</h2>
-  <div class="drop" id="drop"><b>PDF hierher ziehen oder tippen zum Auswählen</b>Trade-Republic-Wertpapierabrechnung (Kauf oder Verkauf) – auch mehrere auf einmal.<input type="file" id="pdfIn" accept="application/pdf,.pdf" multiple class="hide"></div>
-  <div class="note">Das PDF wird nur in diesem Browser gelesen. Es wird weder hochgeladen noch gespeichert – übernommen werden nur Aktie, ISIN, Stück, Kurs, Datum, Gebühren und Steuern. Adresse, Depot- und IBAN-Nummer werden ignoriert.</div>
-  <div id="impOut">${imp.length ? impHtml(imp) : ''}</div>`;
-}
-function impHtml(imp) {
-  const good = imp.filter(x => x.err == null && x.res && x.res.ok);
-  return imp.map(x => x.err ? `<div class="prop"><h3>${esc(x.file)}</h3><div class="errbox">${esc(x.err)}</div></div>` :
-    `<div class="prop"><h3>${x.b.art === 'Kauf' ? '🟢 Kauf' : '🔴 Verkauf'}: ${esc(x.b.name)} <span class="mut" style="font-weight:400">· ${fdate(x.b.date)}</span></h3>
-    <div class="kv"><span>ISIN</span><span>${esc(x.b.isin) || '–'}</span><span>Stück</span><span>${x.b.qty}</span><span>Kurs</span><span>${price(x.b.price)}</span><span>Kurswert</span><span>${eur(x.b.amount)}</span>
-    <span>Gebühren</span><span>${eur(x.b.fee)}</span>${x.b.kest || x.b.kist || x.b.soli ? `<span>Steuern</span><span>KESt ${eur(x.b.kest)} · KiSt ${eur(x.b.kist)} · Soli ${eur(x.b.soli)}</span>` : ''}<span>Buchung</span><span>${eur(x.b.booking)} <span class="tag ${x.b.chk === 'OK' ? 'good' : 'bad'}">${x.b.chk}</span></span></div>
-    <div class="${x.res.ok ? 'okbox' : x.res.skip ? 'warnbox' : 'errbox'}">${esc(x.res.text)}</div></div>`).join('') +
-    (good.length ? `<div class="acts"><button class="btn" id="impCancel">Verwerfen</button><button class="btn p" id="impApply">${good.length} Beleg${good.length > 1 ? 'e' : ''} übernehmen</button></div>` : `<div class="acts"><button class="btn" id="impCancel">Schließen</button></div>`);
+function defaultName(p) {
+  const items = [...live(S.data.trades), ...live(S.data.tx), { name: p.name, isin: p.isin }];
+  const R = stockResolver(items), k = R(p);
+  const hit = [...live(S.data.trades), ...live(S.data.tx)].find(x => x.name && R(x) === k);
+  return hit ? hit.name : p.name;
 }
 async function handlePdfs(files) {
-  const out = []; const parsed = [];
-  $('#impOut').innerHTML = '<div class="note">Lese PDF …</div>';
   for (const f of files) {
-    try { const b = parseTR(await pdfLines(f)); parsed.push({ file: f.name, b }); } catch (e) { out.push({ file: f.name, err: e.message || String(e) }); }
+    try {
+      const bytes = await f.arrayBuffer();
+      const lns = await pdfLines(bytes);
+      if (!lns.length) throw new Error('Im PDF wurde kein Text gefunden – vermutlich ein Scan. Eine Texterkennung (OCR) ist nicht enthalten. Bitte die Transaktion über „+ Manuell“ erfassen.');
+      const p = parseTR(lns); p.name = defaultName(p);
+      S.imp.push({ id: uid(), file: f.name, bytes, tx: p, keep: true });
+    } catch (e) { S.imp.push({ id: uid(), file: f.name, err: e.message || String(e) }); }
   }
-  const plan = planImport(parsed.map(p => p.b));
-  for (const p of parsed) { const r = plan.find(x => x.b === p.b); out.push({ file: p.file, b: p.b, res: r }); }
-  out.sort((x,y)=>(x.b?x.b.date:'').localeCompare(y.b?y.b.date:'')||((x.b&&x.b.art==='Kauf'?0:1)-(y.b&&y.b.art==='Kauf'?0:1)));
-  S.imp = out; render();
+  render();
 }
-function applyImport() {
-  const todo = S.imp.filter(x => !x.err && x.res && x.res.ok).map(x => x.b).sort((a, b) => a.date.localeCompare(b.date) || (a.art === 'Kauf' ? -1 : 1) - (b.art === 'Kauf' ? -1 : 1));
-  for (const b of todo) {
-    if (b.art === 'Kauf') applyBuy(b, S.data.trades); else applySell(b, S.data.trades);
-    S.data.belege.push({ id: uid(), date: b.date, art: b.art, name: b.name, isin: b.isin, qty: b.qty, price: b.price, amount: b.amount, fee: b.fee, tax: R2(b.kest + b.kist + b.soli), booking: b.booking, ex: b.ex, chk: b.chk, u: Date.now() });
+function simImp() {
+  const items = S.imp.filter(x => !x.err), res = {}, run = [];
+  items.forEach((x, i) => {
+    const dup = isDup(x.tx, items.slice(0, i).map(y => y.tx));
+    res[x.id] = { dup, chk: chkTx(x.tx) };
+    if (!dup) run.push({ ...x.tx, id: x.id, u: 0 });
+  });
+  const rp = replay(run);
+  items.forEach(x => { res[x.id].snap = rp.snaps[x.id]; res[x.id].err = rp.errors[x.id]; });
+  return res;
+}
+const txValid = t => t.name && t.date && +t.qty > 0 && +t.price > 0 && (t.art === 'Kauf' || t.art === 'Verkauf');
+function simBox(t, r) {
+  if (r.dup) return `<div class="errbox"><b>${DUP_MSG}</b></div>`;
+  if (r.err) return `<div class="errbox">${esc(r.err)}</div>`;
+  const sn = r.snap; if (!sn) return '';
+  const b = sn.before, a = sn.after;
+  let h = '<div class="kv">';
+  h += `<span>Aktueller Bestand</span><span>${b.qty ? qf(b.qty) + ' Stück · Ø ' + price(b.avg) : 'keiner (neue Position)'}</span>`;
+  h += `<span>Neuer Bestand</span><b>${a.qty ? qf(a.qty) + ' Stück' : '0 – Position vollständig verkauft'}</b>`;
+  h += `<span>Neuer Ø Einstandspreis</span><b>${a.qty ? price(a.avg) : '–'}</b>`;
+  if (t.art === 'Kauf') h += `<span>Gesamter Einstandswert</span><span>${eur(a.cost)} <span class="mut">(inkl. Gebühren ${eur(a.cost + a.fees)})</span></span>`;
+  else {
+    h += `<span>Einstandspreis der verkauften Stück</span><span>${price(b.avg)}</span>`;
+    h += `<span>Realisiert vor Gebühren</span><b class="${sc(sn.gross)}">${eur(sn.gross)}</b>`;
+    h += `<span>Netto nach Gebühren &amp; Steuern</span><b class="${sc(sn.net)}">${eur(sn.net)} (${pct(sn.net / (t.qty * b.avg), 2, true)})</b>`;
+    if (a.qty) h += `<span>Einstandswert Restbestand</span><span>${eur(a.cost)}</span>`;
   }
-  S.imp = []; S.tab = 'trades'; commit();
+  return h + '</div>';
+}
+function impCard(x, r) {
+  if (x.err) return `<div class="prop"><h3>${esc(x.file)}</h3><div class="errbox">${esc(x.err)}</div><div class="acts"><button class="btn sm" data-impdel="${x.id}">Entfernen</button></div></div>`;
+  const t = x.tx;
+  const f = (k, label, val, o = {}) => `<label class="${o.w ? 'w' : ''}">${label}<input data-imp="${x.id}" data-f="${k}" ${o.type ? `type="${o.type}"` : 'type="text" inputmode="decimal"'} value="${esc(val ?? '')}" ${o.list ? 'list="nm"' : ''}></label>`;
+  const names = [...new Set([...live(S.data.trades), ...live(S.data.tx)].map(z => z.name))].sort();
+  const ok = !r.dup && !r.err && txValid(t);
+  return `<div class="prop"><h3>${t.art === 'Kauf' ? '🟢 Kauf' : '🔴 Verkauf'}: ${esc(t.name)} <span class="mut" style="font-weight:400">· ${fdate(t.date)} ${esc(t.time || '')}</span></h3>
+  <div class="note" style="margin:0 0 8px">Datei: ${esc(x.file)} · Prüfung der Abrechnung: <span class="tag ${r.chk === 'OK' ? 'good' : 'bad'}">${r.chk}</span></div>
+  <datalist id="nm">${names.map(n => `<option value="${esc(n)}">`).join('')}</datalist>
+  <div class="fg">
+  <label>Art<select data-imp="${x.id}" data-f="art">${['Kauf', 'Verkauf'].map(a => `<option ${a === t.art ? 'selected' : ''}>${a}</option>`).join('')}</select></label>
+  ${f('date', 'Handelsdatum', t.date, { type: 'date' })}
+  ${f('name', 'Aktie / Unternehmen', t.name, { type: 'text', list: 1, w: 1 })}
+  ${f('isin', 'ISIN', t.isin, { type: 'text' })}${f('wkn', 'WKN (falls bekannt)', t.wkn, { type: 'text' })}
+  ${f('qty', 'Stück', numIn(t.qty))}${f('price', 'Kurs pro Aktie (€)', numIn(t.price))}
+  ${f('amount', t.art === 'Kauf' ? 'Gesamtkaufpreis (€)' : 'Verkaufserlös (€)', numIn(t.amount))}${f('fee', 'Gebühren (€)', numIn(t.fee))}
+  ${f('kest', 'Kapitalertragsteuer (€)', numIn(t.kest))}${f('kist', 'Kirchensteuer (€)', numIn(t.kist))}
+  ${f('soli', 'Solidaritätszuschlag (€)', numIn(t.soli))}${f('booking', 'Tatsächlicher Abrechnungsbetrag (€)', numIn(t.booking))}
+  </div>
+  <div style="margin-top:10px">${simBox(t, r)}</div>
+  <label class="note" style="display:block"><input type="checkbox" data-keep="${x.id}" ${x.keep ? 'checked' : ''}> Original-PDF verschlüsselt speichern (damit du es später aus dem Journal wieder öffnen kannst)</label>
+  <div class="acts"><button class="btn sm" data-impdel="${x.id}">Verwerfen</button><button class="btn p" data-impok="${x.id}" ${ok ? '' : 'disabled'}>Transaktion bestätigen und verbuchen</button></div></div>`;
+}
+function impHtml() {
+  if (!S.imp.length) return '';
+  const sim = simImp();
+  const okIds = S.imp.filter(x => !x.err && !sim[x.id].dup && !sim[x.id].err && txValid(x.tx)).map(x => x.id);
+  return S.imp.map(x => impCard(x, sim[x.id] || {})).join('') + (okIds.length > 1 ? `<div class="acts"><button class="btn p" id="impAll">Alle ${okIds.length} Transaktionen bestätigen und verbuchen</button></div>` : '');
+}
+/* ---- PDF-Originale (verschlüsselt, Schlüssel liegt im verschlüsselten Datensatz) ---- */
+function ensurePk() { if (!S.data.pk) S.data.pk = bytesB64(crypto.getRandomValues(new Uint8Array(32))); }
+const pdfKeyObj = () => crypto.subtle.importKey('raw', b64Bytes(S.data.pk), 'AES-GCM', false, ['encrypt', 'decrypt']);
+async function savePdf(id, bytes) {
+  ensurePk(); const k = await pdfKeyObj(), iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, k, bytes));
+  await idb.set('pdf:' + id, { v: 1, iv: bytesB64(iv), ct: bytesB64(ct) });
+}
+async function uploadPdfs() {
+  for (const t of live(S.data.tx)) {
+    if (!t.pdf || localStorage.getItem('pdfup:' + t.id)) continue;
+    const b = await idb.get('pdf:' + t.id); if (!b) continue;
+    const name = `pdf-${t.id}.enc.json`;
+    if (!(await driveFind(false, name))) await drivePut(b, null, name);
+    localStorage.setItem('pdfup:' + t.id, '1');
+  }
+}
+async function openPdf(id) {
+  let b = await idb.get('pdf:' + id);
+  if (!b && localStorage.getItem('driveLinked')) { try { const f = await driveFind(true, `pdf-${id}.enc.json`); if (f) { b = await driveGet(f.id); await idb.set('pdf:' + id, b); } } catch (e) { return alert(e.message || e); } }
+  if (!b) return alert('Das Original-PDF ist auf diesem Gerät nicht gespeichert und wurde nicht in Google Drive gefunden.');
+  try {
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64Bytes(b.iv) }, await pdfKeyObj(), b64Bytes(b.ct));
+    const url = URL.createObjectURL(new Blob([pt], { type: 'application/pdf' }));
+    if (!window.open(url, '_blank')) { const a = document.createElement('a'); a.href = url; a.download = 'Abrechnung.pdf'; a.click(); }
+  } catch { alert('Das PDF konnte nicht entschlüsselt werden.'); }
+}
+async function bookImp(ids) {
+  const sim = simImp();
+  const items = S.imp.filter(x => ids.includes(x.id) && !x.err && !sim[x.id].dup && !sim[x.id].err && txValid(x.tx));
+  if (!items.length) return;
+  const cand = items.map(x => ({ ...x.tx, id: x.id, u: Date.now(), created: Date.now(), pdf: x.keep ? 1 : 0 }));
+  const msg = validateLedger([...S.data.tx, ...cand]); if (msg) return alert(msg);
+  for (const x of items) if (x.keep) await savePdf(x.id, x.bytes);
+  S.data.tx.push(...cand);
+  S.imp = S.imp.filter(x => !items.includes(x));
+  commit();
+}
+function viewPdf() {
+  return `<h2>PDF-Abrechnung einlesen</h2>
+  <div class="drop" id="drop"><b>PDF hierher ziehen oder tippen zum Auswählen</b>Trade-Republic-Wertpapierabrechnung (Kauf oder Verkauf) – auch mehrere auf einmal.<input type="file" id="pdfIn" accept="application/pdf,.pdf" multiple class="hide"></div>
+  <div class="note">Das PDF wird im Browser gelesen. Vor dem Verbuchen siehst du eine Vorschau und kannst jedes Feld korrigieren. Adresse, Depot- und IBAN-Nummer werden nicht übernommen. Optional wird das Original verschlüsselt mitgespeichert (dann auch Adresse und Depotnummer im PDF selbst).</div>
+  <div id="impOut">${impHtml()}</div>
+  <h2>Transaktionsjournal</h2>${journalHtml()}`;
+}
+function journalHtml() {
+  trades(); const rp = S._rp, q = (S.jq || '').toLowerCase();
+  let list = live(S.data.tx).filter(t => !q || (t.name + ' ' + (t.isin || '')).toLowerCase().includes(q)).sort(cmpTx);
+  if (S.jdesc !== false) list.reverse();
+  const rows = list.map(t => {
+    const sn = rp.snaps[t.id], er = rp.errors[t.id], tax = (+t.kest || 0) + (+t.kist || 0) + (+t.soli || 0), fee = +t.fee || 0;
+    const total = t.art === 'Kauf' ? -(+t.amount + fee + tax) : (+t.amount - fee - tax);
+    return `<tr class="click" data-tx="${t.id}"><td>${fdate(t.date)}${t.time ? ' <span class="mut">' + esc(t.time) + '</span>' : ''}</td><td>${esc(t.name)}</td><td>${esc(t.isin || '')}</td><td><span class="tag ${t.art === 'Kauf' ? 'good' : 'bad'}">${t.art}</span></td><td>${qf(t.qty)}</td><td>${price(t.price)}</td><td>${eur(fee + tax)}</td><td class="${sc(total)}">${eur(total)}</td><td>${er ? '<span class="neg">Fehler</span>' : qf(sn?.after.qty)}</td><td>${er ? '–' : (sn?.after.qty ? price(sn.after.avg) : '–')}</td><td>${t.pdf ? `<button class="btn sm" data-pdf="${t.id}" title="Original-PDF öffnen">📄</button>` : ''}</td></tr>`;
+  }).join('') || '<tr><td colspan="11" class="mut" style="text-align:center">Noch keine Transaktionen. PDF hochladen oder „+ Manuell“.</td></tr>';
+  return `<div class="bar"><input type="search" id="jq" placeholder="Journal durchsuchen (Aktie, ISIN) …" value="${esc(S.jq || '')}"><select id="jsort"><option value="desc" ${S.jdesc !== false ? 'selected' : ''}>Neueste zuerst</option><option value="asc" ${S.jdesc === false ? 'selected' : ''}>Älteste zuerst</option></select><button class="btn" id="newTx">+ Manuell</button></div>
+  <div class="tw"><table><thead><tr><th>Datum</th><th>Aktie</th><th>ISIN</th><th>Typ</th><th>Stück</th><th>Kurs</th><th>Gebühren &amp; Steuern</th><th>Gesamtbetrag</th><th>Bestand danach</th><th>Ø Einstand danach</th><th>PDF</th></tr></thead><tbody>${rows}</tbody></table></div>
+  <div class="note">Zeile antippen zum Korrigieren oder Stornieren. Bestand und Einstandspreis werden bei jeder Änderung neu aus allen Buchungen berechnet. Ältere Trades ohne Transaktion (Excel-Übernahme, manuell angelegt) stehen nicht im Journal; ihre offenen Positionen bilden den Anfangsbestand der jeweiligen Aktie.</div>`;
+}
+function txForm(id) {
+  const t0 = id ? S.data.tx.find(x => x.id === id) : { art: 'Kauf', date: today(), time: '', name: '', isin: '', wkn: '', qty: '', price: '', amount: '', fee: '', kest: '', kist: '', soli: '', booking: null };
+  const names = [...new Set([...live(S.data.trades), ...live(S.data.tx)].map(z => z.name))].sort();
+  const f = (k, label, val, o = {}) => `<label class="${o.w ? 'w' : ''}">${label}<input id="x_${k}" ${o.type ? `type="${o.type}"` : 'type="text" inputmode="decimal"'} value="${esc(val ?? '')}" ${o.list ? 'list="nm2"' : ''}></label>`;
+  modal(`<form><h3>${id ? 'Transaktion bearbeiten' : 'Transaktion manuell erfassen'}</h3><datalist id="nm2">${names.map(n => `<option value="${esc(n)}">`).join('')}</datalist>
+  <div class="fg"><label>Art<select id="x_art">${['Kauf', 'Verkauf'].map(a => `<option ${a === t0.art ? 'selected' : ''}>${a}</option>`).join('')}</select></label>${f('date', 'Datum', t0.date, { type: 'date' })}
+  ${f('name', 'Aktie', t0.name, { type: 'text', list: 1, w: 1 })}${f('isin', 'ISIN', t0.isin, { type: 'text' })}${f('wkn', 'WKN', t0.wkn, { type: 'text' })}
+  ${f('qty', 'Stück', numIn(t0.qty))}${f('price', 'Kurs (€)', numIn(t0.price))}${f('fee', 'Gebühren (€)', numIn(t0.fee))}${f('kest', 'Kapitalertragsteuer (€)', numIn(t0.kest))}${f('kist', 'Kirchensteuer (€)', numIn(t0.kist))}${f('soli', 'Solidaritätszuschlag (€)', numIn(t0.soli))}</div>
+  <div class="prev" id="prev"></div><div class="note" id="xerr"></div>
+  <div class="acts">${id ? '<button class="btn d" id="x_del">Stornieren</button>' : ''}${id && t0.pdf ? '<button class="btn" id="x_pdf">📄 PDF öffnen</button>' : ''}<button class="btn" data-close>Abbrechen</button><button class="btn p" id="x_ok">Speichern</button></div></form>`, d => {
+    const read = () => ({ ...t0, art: $('#x_art').value, date: $('#x_date').value, name: $('#x_name').value.trim(), isin: $('#x_isin').value.trim().toUpperCase(), wkn: $('#x_wkn').value.trim().toUpperCase(), qty: num($('#x_qty').value), price: num($('#x_price').value), fee: num($('#x_fee').value) || 0, kest: num($('#x_kest').value) || 0, kist: num($('#x_kist').value) || 0, soli: num($('#x_soli').value) || 0 });
+    const prev = () => { const r = read(); const amt = (r.qty || 0) * (r.price || 0); const tax = r.kest + r.kist + r.soli; $('#prev').innerHTML = `<span>Kurswert: <b>${eur(amt)}</b></span><span>Gesamtbetrag: <b>${eur(r.art === 'Kauf' ? -(amt + r.fee + tax) : amt - r.fee - tax)}</b></span>`; };
+    d.querySelector('form').addEventListener('input', prev); prev();
+    $('#x_ok').onclick = ev => {
+      ev.preventDefault();
+      const r = read();
+      if (!txValid(r)) return alert('Bitte Aktie, Datum, Stück und Kurs ausfüllen.');
+      r.amount = R2(r.qty * r.price); if (!r.wkn) r.wkn = wknOf(r.isin);
+      r.u = Date.now(); r.booking = null;
+      const list = id ? S.data.tx.map(x => x.id === id ? { ...r } : x) : [...S.data.tx, { ...r, id: uid(), created: Date.now(), pdf: 0 }];
+      const msg = validateLedger(list); if (msg) { $('#xerr').innerHTML = `<div class="errbox">${esc(msg)}</div>`; return; }
+      S.data.tx = list; d.close(); commit();
+    };
+    $('#x_del') && ($('#x_del').onclick = ev => {
+      ev.preventDefault(); if (!confirm('Diese Transaktion stornieren? Bestand und Einstandspreis werden neu berechnet.')) return;
+      const list = S.data.tx.map(x => x.id === id ? { ...x, del: true, u: Date.now() } : x);
+      const msg = validateLedger(list); if (msg) { $('#xerr').innerHTML = `<div class="errbox">Stornierung nicht möglich: ${esc(msg)}</div>`; return; }
+      S.data.tx = list; d.close(); commit();
+    });
+    $('#x_pdf') && ($('#x_pdf').onclick = ev => { ev.preventDefault(); openPdf(id); });
+  });
+}
+function genInfo(id) {
+  const it = allRaw().find(x => x.id === id); if (!it) return;
+  const e = enrich(it);
+  modal(`<form><h3>${esc(it.name)}</h3><div class="note" style="margin:0">${it.src === 'tx' ? 'Dieser Trade wurde aus einem Verkauf im Transaktionsjournal berechnet.' : 'Diese Position ergibt sich aus allen Käufen und Verkäufen im Transaktionsjournal (gewichteter Durchschnitt).'} Änderungen nimmst du im Journal vor.</div>
+  <div class="kv"><span>Stück</span><span>${qf(e.qty)}</span><span>Ø Einstandspreis</span><span>${price(e.inPrice)}</span>${e.closed ? `<span>Verkaufskurs</span><span>${price(e.outPrice)}</span><span>Netto</span><b class="${sc(e.net)}">${eur(e.net)} (${pct(e.netpct, 2, true)})</b>` : `<span>Einstandswert</span><span>${eur(e.inv)}</span>`}<span>Gebühren (anteilig)</span><span>${eur(e.fee)}</span></div>
+  <div class="acts"><button class="btn" data-close>Schließen</button><button class="btn p" id="g_j">Zum Journal</button></div></form>`, d => { $('#g_j').onclick = ev => { ev.preventDefault(); d.close(); if (it.txid) { txForm(it.txid); } else { S.tab = 'pdf'; render(); } }; });
 }
 
 /* ====================== Mehr ====================== */
@@ -752,8 +953,8 @@ function viewMore() {
     <div class="row"><div class="t"><b>Fingerabdruck / Gerätesperre</b><span>${canBio() ? 'Entsperrt dieses Gerät per Fingerabdruck, Gesicht oder Geräte-PIN.' : 'Nur über HTTPS verfügbar.'}</span></div><div><button class="btn sm" id="bioOn" ${canBio() ? '' : 'disabled'}>Einrichten</button> <button class="btn sm" id="bioOff">Entfernen</button></div></div>
     <div class="row"><div class="t"><b>PIN ändern</b><span>Verschlüsselt alles neu und überschreibt Drive.</span></div><button class="btn sm" id="pinChange">PIN ändern</button></div>
     <div class="row"><div class="t"><b>Jetzt sperren</b><span>Sperrt automatisch nach 5 Minuten Inaktivität.</span></div><button class="btn sm" id="lockBtn">🔒 Sperren</button></div></div>
-  <h2>Importierte Belege (${bel.length})</h2><div class="tw"><table><thead><tr><th>Datum</th><th>Art</th><th>Aktie</th><th>Stück</th><th>Kurs</th><th>Kurswert</th><th>Gebühren</th><th>Steuern</th><th>Buchung</th><th>Prüfung</th><th></th></tr></thead><tbody>${bel.map(b => `<tr><td>${fdate(b.date)}</td><td>${b.art}</td><td>${esc(b.name)}</td><td>${qf(b.qty)}</td><td>${price(b.price)}</td><td>${eur(b.amount)}</td><td>${eur(b.fee)}</td><td>${eur(b.tax)}</td><td>${eur(b.booking)}</td><td><span class="tag ${b.chk === 'OK' ? 'good' : 'bad'}">${b.chk}</span></td><td><button class="btn sm d" data-delBeleg="${b.id}">✕</button></td></tr>`).join('') || '<tr><td colspan="11" class="mut" style="text-align:center">Noch keine Belege importiert</td></tr>'}</tbody></table></div>
-  <div class="note">Ein Beleg-Eintrag zu löschen ändert die Trades nicht, er erlaubt nur, dasselbe PDF erneut einzulesen.</div>
+  ${bel.length ? '' : '<!--'}<h2>Frühere Belege (${bel.length}) – aus der alten Importfunktion</h2><div class="tw"><table><thead><tr><th>Datum</th><th>Art</th><th>Aktie</th><th>Stück</th><th>Kurs</th><th>Kurswert</th><th>Gebühren</th><th>Steuern</th><th>Buchung</th><th>Prüfung</th><th></th></tr></thead><tbody>${bel.map(b => `<tr><td>${fdate(b.date)}</td><td>${b.art}</td><td>${esc(b.name)}</td><td>${qf(b.qty)}</td><td>${price(b.price)}</td><td>${eur(b.amount)}</td><td>${eur(b.fee)}</td><td>${eur(b.tax)}</td><td>${eur(b.booking)}</td><td><span class="tag ${b.chk === 'OK' ? 'good' : 'bad'}">${b.chk}</span></td><td><button class="btn sm d" data-delBeleg="${b.id}">✕</button></td></tr>`).join('') || '<tr><td colspan="11" class="mut" style="text-align:center">Noch keine Belege importiert</td></tr>'}</tbody></table></div>
+  <div class="note">Ein Beleg-Eintrag zu löschen ändert die Trades nicht, er erlaubt nur, dasselbe PDF erneut einzulesen.</div>${bel.length ? '' : '-->'}
   <h2>Sicherung &amp; Austausch</h2><div class="card">
     <div class="row"><div class="t"><b>Daten exportieren (JSON)</b><span>Unverschlüsselte Sicherung – sicher aufbewahren!</span></div><button class="btn sm" id="expJson">JSON</button></div>
     <div class="row"><div class="t"><b>Trades als CSV exportieren</b><span>Zum Öffnen in Excel.</span></div><button class="btn sm" id="expCsv">CSV</button></div>
@@ -777,7 +978,10 @@ function bind() {
   $('#syncchip').onclick = () => sync(true);
   on('[data-trade]', 'click', e => tradeForm(e.currentTarget.dataset.trade));
   on('[data-plan]', 'click', e => planForm(e.currentTarget.dataset.plan));
-  on('[data-cur]', 'change', e => { const t = S.data.trades.find(x => x.id === e.target.dataset.cur); t.cur = num(e.target.value); t.u = Date.now(); commit(); });
+  on('[data-cur]', 'change', e => { const it = allRaw().find(x => x.id === e.target.dataset.cur); if (!it) return; setCur(S._rp.R(it), num(e.target.value)); commit(); });
+  on('[data-dcur]', 'change', e => { allRaw(); setCur(e.target.dataset.dcur, num(e.target.value)); commit(); });
+  on('[data-dcur]', 'click', e => e.stopPropagation());
+  $('#showSold') && ($('#showSold').onchange = e => { S.showSold = e.target.checked; render(); });
   on('[data-cur]', 'click', e => e.stopPropagation());
   on('[data-totrade]', 'click', e => { e.stopPropagation(); const p = S.data.plans.find(x => x.id === e.currentTarget.dataset.totrade); if (!p.qty || !p.entry) return alert('Bitte erst Stück und Einstiegskurs im Plan eintragen.'); S.data.trades.push({ id: uid(), name: p.name, isin: '', inDate: today(), qty: p.qty, inPrice: p.entry, outDate: '', outPrice: null, cur: null, fee: 0, kest: 0, kist: 0, soli: 0, u: Date.now() }); p.status = 'Eingestiegen'; p.u = Date.now(); commit(); });
   $('#newTrade') && ($('#newTrade').onclick = () => tradeForm());
@@ -794,8 +998,22 @@ function bind() {
     ['dragleave', 'drop'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.remove('over'); }));
     drop.addEventListener('drop', ev => { const fs = [...ev.dataTransfer.files].filter(f => /pdf$/i.test(f.name) || f.type === 'application/pdf'); if (fs.length) handlePdfs(fs); });
   }
-  $('#impApply') && ($('#impApply').onclick = applyImport);
-  $('#impCancel') && ($('#impCancel').onclick = () => { S.imp = []; render(); });
+  const NUMF = ['qty', 'price', 'amount', 'fee', 'kest', 'kist', 'soli', 'booking'];
+  on('[data-imp]', 'change', e => {
+    const x = S.imp.find(y => y.id === e.target.dataset.imp), k = e.target.dataset.f, v = e.target.value;
+    x.tx[k] = NUMF.includes(k) ? (num(v) ?? (k === 'booking' ? null : 0)) : (k === 'isin' || k === 'wkn') ? v.trim().toUpperCase() : v.trim();
+    if (k === 'isin' && !x.tx.wkn) x.tx.wkn = wknOf(x.tx.isin);
+    render();
+  });
+  on('[data-keep]', 'change', e => { S.imp.find(y => y.id === e.target.dataset.keep).keep = e.target.checked; });
+  on('[data-impdel]', 'click', e => { S.imp = S.imp.filter(y => y.id !== e.currentTarget.dataset.impdel); render(); });
+  on('[data-impok]', 'click', e => bookImp([e.currentTarget.dataset.impok]));
+  $('#impAll') && ($('#impAll').onclick = () => bookImp(S.imp.filter(x => !x.err).map(x => x.id)));
+  on('[data-tx]', 'click', e => txForm(e.currentTarget.dataset.tx));
+  on('[data-pdf]', 'click', e => { e.stopPropagation(); openPdf(e.currentTarget.dataset.pdf); });
+  $('#newTx') && ($('#newTx').onclick = () => txForm());
+  $('#jq') && ($('#jq').oninput = e => { S.jq = e.target.value; const p = e.target.selectionStart; const sc0 = window.scrollY; render(); const q = $('#jq'); q.focus(); q.setSelectionRange(p, p); window.scrollTo(0, sc0); });
+  $('#jsort') && ($('#jsort').onchange = e => { S.jdesc = e.target.value === 'desc'; render(); });
   // Mehr
   $('#cid') && ($('#cid').onchange = e => cfg.clientId = e.target.value);
   $('#syncNow') && ($('#syncNow').onclick = () => { cfg.clientId = $('#cid').value; sync(true); });
